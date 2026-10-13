@@ -47,7 +47,15 @@ SYSTEM_PROMPT = (
     "PAGE: <numéro de page>\n"
     f'CITATION: "<citation copiée EXACTEMENT depuis ce passage, {CITATION_MAX_CARACTERES} '
     'caractères maximum>"\n\n'
-    "Répète ce bloc de 4 lignes pour chaque affirmation. Termine toujours tes phrases."
+    "Répète ce bloc de 4 lignes pour chaque affirmation. Termine toujours tes phrases.\n\n"
+    "Cas particulier important : si la question demande QUEL document, fichier "
+    "ou passage traite d'un sujet (par exemple \"quel document parle de X ?\"), "
+    "ne réponds PAS \"non trouvée\" simplement parce qu'aucune phrase ne dit "
+    "littéralement \"ce document parle de X\" — il suffit qu'un passage "
+    "contienne clairement des informations sur ce sujet pour que tu puisses "
+    "répondre. Dans ce cas, formule l'AFFIRMATION comme une information "
+    "concrète tirée de ce passage (pas besoin de deviner ou de répéter le nom "
+    "du fichier : il sera ajouté automatiquement à partir du passage cité)."
 )
 
 VERIFICATEUR_SYSTEM_PROMPT = (
