@@ -23,9 +23,11 @@
   },
   "BackendStatus": {
     "checking": "Checking…",
-    "ok": "Backend operational",
-    "degraded": "Backend degraded (no GPU)",
-    "unreachable": "Backend unreachable"
+    "apiUnreachable": "API unavailable",
+    "engineIdle": "API available — AI engine idle",
+    "engineStarting": "AI engine starting…",
+    "engineReady": "AI engine ready",
+    "engineUnavailable": "AI engine unavailable"
   },
   "Topbar": {
     "demoProfileTooltip": "Demo profile — no real authentication is active.",
@@ -119,6 +121,12 @@
     "statEmbeddingModel": "Embedding model",
     "statGpuMemory": "GPU memory",
     "statGpuMemoryUnavailable": "No active GPU (degraded mode).",
+    "gpuCheckTitle": "AI engine check (GPU)",
+    "gpuCheckExplanation": "Runs a real check of the GPU engine (Qwen + BGE-M3). Never automatic: each click can wake the Modal container.",
+    "gpuCheckButton": "Check GPU",
+    "gpuCheckInProgress": "Checking…",
+    "gpuCheckNotYetRun": "Not checked — click \"Check GPU\".",
+    "gpuCheckUnavailable": "The GPU engine did not respond (no GPU available, or the service is stopped).",
     "statLatency": "Average latency",
     "statLatencyUnavailable": "No request measured yet.",
     "statRequestsTotal": "Requests since startup",

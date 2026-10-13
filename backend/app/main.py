@@ -82,6 +82,16 @@ async def health(engine: RagEngine = Depends(get_engine)) -> schemas.HealthRespo
     return schemas.HealthResponse(version=API_VERSION, **info)
 
 
+@app.get("/availability")
+async def availability() -> dict:
+    """Vérification légère : ne dépend PAS de `engine` (donc jamais de GPU,
+    jamais de Qwen/BGE-M3). Sert uniquement en développement local, où un
+    seul serveur répond à toutes les routes ; en production sur Modal, c'est
+    la fonction availability() SÉPARÉE (modal_app.py) qui répond à ce même
+    chemin, dans un conteneur CPU totalement indépendant du conteneur GPU."""
+    return {"status": "ok", "service": "aftech-ai-platform-availability"}
+
+
 @app.get(
     "/documents",
     response_model=list[schemas.DocumentItem],

@@ -23,9 +23,11 @@
   },
   "BackendStatus": {
     "checking": "Vérification…",
-    "ok": "Backend opérationnel",
-    "degraded": "Backend dégradé (pas de GPU)",
-    "unreachable": "Backend inaccessible"
+    "apiUnreachable": "API indisponible",
+    "engineIdle": "API disponible — moteur IA en veille",
+    "engineStarting": "Moteur IA en démarrage…",
+    "engineReady": "Moteur IA prêt",
+    "engineUnavailable": "Moteur IA indisponible"
   },
   "Topbar": {
     "demoProfileTooltip": "Profil de démonstration — aucune authentification réelle n'est active.",
@@ -119,6 +121,12 @@
     "statEmbeddingModel": "Modèle d'embeddings",
     "statGpuMemory": "Mémoire GPU",
     "statGpuMemoryUnavailable": "Aucun GPU actif (mode dégradé).",
+    "gpuCheckTitle": "Vérification du moteur IA (GPU)",
+    "gpuCheckExplanation": "Lance une vraie vérification du moteur GPU (Qwen + BGE-M3). Jamais automatique : chaque clic peut réveiller le conteneur Modal.",
+    "gpuCheckButton": "Vérifier le GPU",
+    "gpuCheckInProgress": "Vérification…",
+    "gpuCheckNotYetRun": "Non vérifié — cliquez sur \"Vérifier le GPU\".",
+    "gpuCheckUnavailable": "Le moteur GPU n'a pas répondu (pas de GPU disponible, ou service arrêté).",
     "statLatency": "Latence moyenne",
     "statLatencyUnavailable": "Aucune requête mesurée pour l'instant.",
     "statRequestsTotal": "Requêtes depuis le démarrage",

@@ -94,3 +94,36 @@ def web():
     from app.main import app as fastapi_app
 
     return fastapi_app
+
+
+# Image MINIMALE pour la disponibilité : aucune dépendance ML (ni torch, ni
+# transformers, ni faiss) — juste FastAPI, pour un démarrage quasi instantané,
+# totalement indépendante de `image` (celle de web(), ci-dessus).
+image_disponibilite = modal.Image.debian_slim(python_version="3.11").pip_install("fastapi")
+
+
+@app.function(
+    image=image_disponibilite,
+    min_containers=0,
+    max_containers=1,
+    scaledown_window=60,
+)
+@modal.asgi_app()
+def availability():
+    """Fonction Modal SÉPARÉE, CPU uniquement (pas de `gpu=` ici) : son seul
+    rôle est de répondre "l'API est joignable", sans jamais importer
+    app.main (qui charge Qwen/BGE-M3 via le lifespan) ni toucher au GPU.
+
+    But explicite : le frontend peut interroger CETTE fonction en boucle
+    (toutes les 30 s) SANS jamais réinitialiser le minuteur de scale-to-zero
+    du conteneur GPU de web() — les deux fonctions sont des conteneurs
+    entièrement indépendants, avec leurs propres cycles de vie Modal."""
+    from fastapi import FastAPI
+
+    api_disponibilite = FastAPI()
+
+    @api_disponibilite.get("/availability")
+    def etat_disponibilite() -> dict:
+        return {"status": "ok", "service": "aftech-ai-platform-availability"}
+
+    return api_disponibilite

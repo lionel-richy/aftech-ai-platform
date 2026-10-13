@@ -6,6 +6,7 @@ import { Loader2, Plus, Send } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { BackendUnavailableState, ErrorState } from "@/components/ui/StateViews";
+import { definirEtatMoteur } from "@/lib/engineStatus";
 import { expliquerErreurHttp } from "@/lib/errorMessages";
 import type { AskResponse } from "@/lib/types";
 import { useChatHistory } from "@/lib/useChatHistory";
@@ -31,6 +32,10 @@ export function ChatView() {
     ajouter({ id, question: texte, enCours: true });
     setSaisie("");
     setEnvoiEnCours(true);
+    // Une vraie question démarre réellement le moteur (voilà pourquoi
+    // c'est la SEULE action — avec la vérification manuelle du tableau de
+    // bord — qui a le droit de publier cet état).
+    definirEtatMoteur({ etat: "demarrage", vramUtiliseeOctets: null, vramTotaleOctets: null });
 
     try {
       const reponseHttp = await fetch("/api/ask", {
@@ -45,11 +50,17 @@ export function ChatView() {
         const corps = await reponseHttp.json().catch(() => null);
         const explication = expliquerErreurHttp(reponseHttp.status, corps?.message, corps?.code, corps?.values);
         mettreAJour(id, { enCours: false, erreur: explication });
+        definirEtatMoteur({
+          etat: explication.type === "indisponible" ? "indisponible" : "pret",
+          vramUtiliseeOctets: null,
+          vramTotaleOctets: null,
+        });
         return;
       }
 
       const reponse: AskResponse = await reponseHttp.json();
       mettreAJour(id, { enCours: false, reponse });
+      definirEtatMoteur({ etat: "pret", vramUtiliseeOctets: null, vramTotaleOctets: null });
     } catch {
       mettreAJour(id, {
         enCours: false,
@@ -60,6 +71,7 @@ export function ChatView() {
           type: "indisponible",
         },
       });
+      definirEtatMoteur({ etat: "indisponible", vramUtiliseeOctets: null, vramTotaleOctets: null });
     } finally {
       setEnvoiEnCours(false);
     }

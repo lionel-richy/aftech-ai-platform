@@ -23,9 +23,11 @@
   },
   "BackendStatus": {
     "checking": "Überprüfung…",
-    "ok": "Backend betriebsbereit",
-    "degraded": "Backend eingeschränkt (keine GPU)",
-    "unreachable": "Backend nicht erreichbar"
+    "apiUnreachable": "API nicht verfügbar",
+    "engineIdle": "API verfügbar — KI-Engine im Ruhezustand",
+    "engineStarting": "KI-Engine startet…",
+    "engineReady": "KI-Engine bereit",
+    "engineUnavailable": "KI-Engine nicht verfügbar"
   },
   "Topbar": {
     "demoProfileTooltip": "Demo-Profil — es ist keine echte Authentifizierung aktiv.",
@@ -119,6 +121,12 @@
     "statEmbeddingModel": "Embedding-Modell",
     "statGpuMemory": "GPU-Speicher",
     "statGpuMemoryUnavailable": "Keine aktive GPU (eingeschränkter Modus).",
+    "gpuCheckTitle": "Prüfung der KI-Engine (GPU)",
+    "gpuCheckExplanation": "Führt eine echte Prüfung der GPU-Engine durch (Qwen + BGE-M3). Nie automatisch: jeder Klick kann den Modal-Container aufwecken.",
+    "gpuCheckButton": "GPU prüfen",
+    "gpuCheckInProgress": "Wird geprüft…",
+    "gpuCheckNotYetRun": "Nicht geprüft — auf \"GPU prüfen\" klicken.",
+    "gpuCheckUnavailable": "Die GPU-Engine hat nicht geantwortet (keine GPU verfügbar, oder der Dienst ist gestoppt).",
     "statLatency": "Durchschnittliche Latenz",
     "statLatencyUnavailable": "Noch keine Anfrage gemessen.",
     "statRequestsTotal": "Anfragen seit dem Start",

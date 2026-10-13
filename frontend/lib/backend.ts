@@ -11,6 +11,9 @@ import type { BackendResult } from "./types";
 
 const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL ?? "http://localhost:8000";
 const BACKEND_API_KEY = process.env.BACKEND_API_KEY;
+// URL de la fonction Modal "availability" (CPU uniquement, SANS GPU — voir
+// backend/app/modal_app.py). Délibérément SÉPARÉE de BACKEND_BASE_URL.
+const BACKEND_AVAILABILITY_URL = process.env.BACKEND_AVAILABILITY_URL ?? "http://localhost:8000";
 
 interface AppelBackendOptions {
   methode?: "GET" | "POST";
@@ -85,6 +88,27 @@ export async function appelerBackend<T>(
         ? "Le backend n'a pas répondu à temps (démarrage à froid trop long ?)."
         : "Impossible de contacter le backend (indisponible ?).",
     };
+  } finally {
+    clearTimeout(minuteur);
+  }
+}
+
+// Ping LÉGER, CPU uniquement : interroge la fonction Modal "availability"
+// (jamais "web", qui porte le GPU), sans clé (aucune information sensible
+// renvoyée). C'est la SEULE route que la surveillance automatique du
+// frontend (BackendStatusIndicator) est autorisée à appeler en boucle —
+// jamais /health, jamais /ask : voir docs/MODAL_COST_SAFETY.md.
+export async function verifierDisponibilite(timeoutMs = 5000): Promise<boolean> {
+  const controleur = new AbortController();
+  const minuteur = setTimeout(() => controleur.abort(), timeoutMs);
+  try {
+    const reponse = await fetch(`${BACKEND_AVAILABILITY_URL}/availability`, {
+      signal: controleur.signal,
+      cache: "no-store",
+    });
+    return reponse.ok;
+  } catch {
+    return false;
   } finally {
     clearTimeout(minuteur);
   }

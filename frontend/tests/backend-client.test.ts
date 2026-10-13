@@ -87,3 +87,70 @@ describe("appelerBackend (client serveur -> FastAPI)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("verifierDisponibilite (ping CPU, Partie 2)", () => {
+  beforeEach(() => {
+    vi.stubEnv("BACKEND_AVAILABILITY_URL", "http://availability-test:9000");
+    // Volontairement PAS de BACKEND_API_KEY ici : cette fonction ne doit
+    // JAMAIS en avoir besoin (aucune information sensible renvoyée).
+    vi.stubEnv("BACKEND_API_KEY", "");
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("appelle BACKEND_AVAILABILITY_URL + '/availability', JAMAIS BACKEND_BASE_URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { verifierDisponibilite } = await import("@/lib/backend");
+    await verifierDisponibilite();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://availability-test:9000/availability");
+  });
+
+  it("n'ajoute JAMAIS d'en-tête Authorization (aucune clé nécessaire)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { verifierDisponibilite } = await import("@/lib/backend");
+    await verifierDisponibilite();
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.headers).toBeUndefined();
+  });
+
+  it("fonctionne même sans BACKEND_API_KEY configurée (contrairement à appelerBackend)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { verifierDisponibilite } = await import("@/lib/backend");
+    const disponible = await verifierDisponibilite();
+
+    expect(disponible).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("renvoie false (jamais d'exception) quand l'API est injoignable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+    const { verifierDisponibilite } = await import("@/lib/backend");
+    const disponible = await verifierDisponibilite();
+
+    expect(disponible).toBe(false);
+  });
+
+  it("renvoie false quand la réponse n'est pas ok (ex. 503)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 503 })));
+
+    const { verifierDisponibilite } = await import("@/lib/backend");
+    const disponible = await verifierDisponibilite();
+
+    expect(disponible).toBe(false);
+  });
+});
