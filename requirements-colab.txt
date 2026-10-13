@@ -1,0 +1,8 @@
+transformers>=4.51.0 #C'est ce qui permet à l'ordinateur de comprendre le texte, de générer des réponses ou de traduire des langues.
+accelerate #sert à distribuer intelligemment le travail dans votre ordinateur. Il s'assure que votre carte graphique (GPU) ou votre processeur (CPU) donne son maximum pour que l'IA réponde le plus vite possible, sans faire planter votre machine.
+bitsandbytes #va "compresser" l'IA (on appelle ça la quantification ou quantization) pour qu'elle prenne 4 à 8 fois moins de place dans la mémoire de l'ordinateur, sans pour autant devenir bête
+sentencepiece #prend votre phrase, la découpe en petits morceaux (des "tokens") et les transforme en une suite de chiffres que "Le Cerveau" (transformers) peut ensuite analyser.
+sentence-transformers #transforme un texte (question ou paragraphe) en une liste de nombres (un "embedding") pour pouvoir comparer leur sens et retrouver les passages les plus proches.
+pypdf #permet d'ouvrir un fichier PDF et d'en extraire le texte, page par page.
+faiss-cpu #moteur de recherche vectorielle : range les embeddings dans un index pour retrouver très vite les passages les plus proches d'une question, même avec beaucoup de documents.
+psutil #lit les infos système (RAM, CPU) pour le benchmark GPU ; a un repli automatique si absent.

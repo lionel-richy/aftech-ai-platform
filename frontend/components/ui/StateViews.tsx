@@ -1,0 +1,56 @@
+// États partagés : chargement, vide, erreur, backend indisponible.
+// Exigence explicite : chaque écran de données doit savoir afficher ces 4 cas.
+import type { ReactNode } from "react";
+import { AlertTriangle, Inbox, Loader2, WifiOff } from "lucide-react";
+
+function Conteneur({ children }: { children: ReactNode }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-col items-center justify-center gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-6 py-12 text-center"
+    >
+      {children}
+    </div>
+  );
+}
+
+export function LoadingState({ label = "Chargement…" }: { label?: string }) {
+  return (
+    <Conteneur>
+      <Loader2 aria-hidden className="h-6 w-6 animate-spin text-primary motion-reduce:animate-none" />
+      <p className="text-sm text-[var(--text-secondary)]">{label}</p>
+    </Conteneur>
+  );
+}
+
+export function EmptyState({ title, description }: { title: string; description?: string }) {
+  return (
+    <Conteneur>
+      <Inbox aria-hidden className="h-6 w-6 text-[var(--text-muted)]" />
+      <p className="text-sm font-medium text-[var(--text-primary)]">{title}</p>
+      {description && <p className="text-sm text-[var(--text-secondary)]">{description}</p>}
+    </Conteneur>
+  );
+}
+
+export function ErrorState({ title, description }: { title: string; description?: string }) {
+  return (
+    <Conteneur>
+      <AlertTriangle aria-hidden className="h-6 w-6 text-danger" />
+      <p className="text-sm font-medium text-danger">{title}</p>
+      {description && <p className="text-sm text-[var(--text-secondary)]">{description}</p>}
+    </Conteneur>
+  );
+}
+
+export function BackendUnavailableState({ description }: { description?: string }) {
+  return (
+    <Conteneur>
+      <WifiOff aria-hidden className="h-6 w-6 text-warning" />
+      <p className="text-sm font-medium text-[var(--text-primary)]">Backend indisponible</p>
+      <p className="text-sm text-[var(--text-secondary)]">
+        {description ?? "Le backend ne répond pas pour le moment (pas de GPU disponible, ou service arrêté)."}
+      </p>
+    </Conteneur>
+  );
+}

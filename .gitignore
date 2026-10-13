@@ -1,0 +1,30 @@
+# Secrets — ne jamais committer
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env*.local
+
+# macOS
+.DS_Store
+
+# Modal
+.modal/
+
+# Données générées ou volumineuses — régénérables via les scripts, jamais
+# du code source. data/samples/ (petites fixtures texte) reste suivi.
+data/indexes/
+data/documents/
+data/sample_pdf/
+results/
