@@ -67,7 +67,7 @@ class FakeRagEngine:
             }
         ]
 
-    def ask(self, question: str, top_k: int = 8) -> dict:
+    def ask(self, question: str, top_k: int = 8, response_language: str = "fr") -> dict:
         if self._ask_exception is not None:
             raise self._ask_exception
         return self._ask_result

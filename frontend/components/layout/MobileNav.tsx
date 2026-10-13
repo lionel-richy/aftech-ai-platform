@@ -4,19 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { NAV_ITEMS } from "./nav-items";
 
 export function MobileNav() {
   const [ouvert, setOuvert] = useState(false);
   const pathname = usePathname();
+  const tNav = useTranslations("Nav");
 
   return (
     <div className="md:hidden">
       <button
         type="button"
         onClick={() => setOuvert(true)}
-        aria-label="Ouvrir le menu de navigation"
+        aria-label={tNav("openMenu")}
         aria-expanded={ouvert}
         className="rounded-md p-2 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]"
       >
@@ -31,17 +33,17 @@ export function MobileNav() {
             aria-hidden="true"
           />
           <nav
-            aria-label="Navigation principale (mobile)"
+            aria-label={tNav("mobileNavLabel")}
             className="relative z-10 flex h-full w-72 flex-col gap-1 bg-[var(--surface)] p-4"
           >
             <div className="mb-2 flex items-center justify-between">
               <span className="text-lg font-semibold text-[var(--text-primary)]">
-                AFTECH <span className="text-primary">AI</span>
+                {tNav("brand")} <span className="text-primary">AI</span>
               </span>
               <button
                 type="button"
                 onClick={() => setOuvert(false)}
-                aria-label="Fermer le menu"
+                aria-label={tNav("closeMenu")}
                 className="rounded-md p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]"
               >
                 <X aria-hidden className="h-5 w-5" />
@@ -61,7 +63,7 @@ export function MobileNav() {
                   }`}
                 >
                   <Icone aria-hidden className="h-4 w-4" />
-                  <span>{item.label}</span>
+                  <span>{tNav(item.labelKey)}</span>
                 </Link>
               );
             })}

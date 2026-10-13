@@ -7,7 +7,10 @@ export async function GET() {
   const resultat = await appelerBackend<DocumentItem[]>("/documents");
 
   if (!resultat.ok) {
-    return NextResponse.json({ message: resultat.message }, { status: resultat.status });
+    return NextResponse.json(
+      { message: resultat.message, code: resultat.code, values: resultat.values },
+      { status: resultat.status },
+    );
   }
 
   return NextResponse.json(resultat.data);

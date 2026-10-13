@@ -1,7 +1,7 @@
 """Schémas Pydantic (contrats d'entrée/sortie de l'API). Un seul endroit pour
 savoir exactement ce que l'API accepte et renvoie."""
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +9,10 @@ from pydantic import BaseModel, Field
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
     top_k: int = Field(default=8, ge=1, le=20)
+    # Langue de la RÉPONSE générée (pas celle de la question posée, ni celle
+    # des documents sources). Les citations/extraits restent toujours dans
+    # leur langue d'origine, quelle que soit cette valeur (voir rag_engine.py).
+    response_language: Literal["fr", "en", "de"] = "fr"
 
 
 class SourceItem(BaseModel):

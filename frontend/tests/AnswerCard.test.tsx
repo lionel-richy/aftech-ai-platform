@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AnswerCard } from "@/components/assistant/AnswerCard";
 import type { AskResponse } from "@/lib/types";
+import { renderAvecIntl } from "./test-utils";
 
 function construireReponse(overrides: Partial<AskResponse>): AskResponse {
   return {
@@ -18,7 +19,7 @@ function construireReponse(overrides: Partial<AskResponse>): AskResponse {
 
 describe("AnswerCard", () => {
   it("affiche les documents sources, leur page et leur extrait", () => {
-    render(
+    renderAvecIntl(
       <AnswerCard
         reponse={construireReponse({
           sources: [
@@ -36,12 +37,12 @@ describe("AnswerCard", () => {
   });
 
   it("explique le statut PARTIAL en français simple", () => {
-    render(<AnswerCard reponse={construireReponse({ status: "PARTIAL" })} />);
+    renderAvecIntl(<AnswerCard reponse={construireReponse({ status: "PARTIAL" })} />);
     expect(screen.getByText(/Seule une partie des affirmations/)).toBeInTheDocument();
   });
 
   it("explique le statut NOT_FOUND en français simple", () => {
-    render(
+    renderAvecIntl(
       <AnswerCard
         reponse={construireReponse({
           status: "NOT_FOUND",
@@ -54,10 +55,28 @@ describe("AnswerCard", () => {
   });
 
   it("affiche le request_id dans les détails techniques", () => {
-    render(<AnswerCard reponse={construireReponse({ request_id: "req-xyz-789" })} />);
+    renderAvecIntl(<AnswerCard reponse={construireReponse({ request_id: "req-xyz-789" })} />);
 
     fireEvent.click(screen.getByText("Détails techniques"));
 
     expect(screen.getByText("req-xyz-789")).toBeInTheDocument();
+  });
+
+  it("explique le statut NOT_FOUND en anglais quand la locale est 'en'", () => {
+    renderAvecIntl(
+      <AnswerCard
+        reponse={construireReponse({
+          status: "NOT_FOUND",
+          answer: "Information not found in the documents.",
+        })}
+      />,
+      { locale: "en" },
+    );
+    expect(screen.getByText(/No verifiable statement was found/)).toBeInTheDocument();
+  });
+
+  it("explique le statut PARTIAL en allemand quand la locale est 'de'", () => {
+    renderAvecIntl(<AnswerCard reponse={construireReponse({ status: "PARTIAL" })} />, { locale: "de" });
+    expect(screen.getByText(/Nur ein Teil der Aussagen/)).toBeInTheDocument();
   });
 });

@@ -1,6 +1,9 @@
 import { FlaskConical } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 
-export function DemoBanner() {
+export async function DemoBanner() {
+  const t = await getTranslations("Administration");
+
   return (
     <div
       role="note"
@@ -8,11 +11,8 @@ export function DemoBanner() {
     >
       <FlaskConical aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
       <div>
-        <p className="text-sm font-semibold text-accent">Mode démonstration</p>
-        <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          Toutes les données de cet espace (utilisateurs, rôles, journal d&apos;audit) sont fictives. Aucune
-          authentification multi-organisation réelle n&apos;est active, et aucune action ci-dessous n&apos;a d&apos;effet réel.
-        </p>
+        <p className="text-sm font-semibold text-accent">{t("demoModeTitle")}</p>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">{t("demoModeDescription")}</p>
       </div>
     </div>
   );

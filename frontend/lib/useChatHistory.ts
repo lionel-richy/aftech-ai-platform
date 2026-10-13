@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import type { ErreurExplicationCles } from "./errorMessages";
 import type { AskResponse } from "./types";
 
 export interface ChatTurn {
   id: string;
   question: string;
   reponse?: AskResponse;
-  erreur?: { titre: string; description: string; type: "indisponible" | "erreur" };
+  // Clés de traduction (namespace "Errors"), pas de texte résolu : permet à
+  // l'historique de rester correct même après un changement de langue.
+  erreur?: ErreurExplicationCles;
   enCours?: boolean;
 }
 

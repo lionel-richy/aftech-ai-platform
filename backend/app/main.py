@@ -53,14 +53,16 @@ def get_engine(request: Request) -> RagEngine:
     return request.app.state.engine
 
 
-def _repondre_ou_erreur(engine: RagEngine, question: str, top_k: int) -> tuple[dict, str]:
+def _repondre_ou_erreur(
+    engine: RagEngine, question: str, top_k: int, response_language: str = "fr"
+) -> tuple[dict, str]:
     """Factorise la gestion d'erreur commune à /ask et /v1/chat/completions :
     jamais de traceback renvoyé au client, toujours un request_id pour le
     diagnostic côté logs serveur."""
     request_id = str(uuid.uuid4())
     debut = time.perf_counter()
     try:
-        resultat = engine.ask(question, top_k)
+        resultat = engine.ask(question, top_k, response_language=response_language)
     except BackendUnavailable as exc:
         metrics_store.record_error()
         raise HTTPException(status_code=503, detail=f"Backend indisponible : {exc}") from exc
@@ -98,7 +100,9 @@ async def get_metrics() -> dict:
 async def ask(
     payload: schemas.AskRequest, engine: RagEngine = Depends(get_engine)
 ) -> schemas.AskResponse:
-    resultat, request_id = _repondre_ou_erreur(engine, payload.question, payload.top_k)
+    resultat, request_id = _repondre_ou_erreur(
+        engine, payload.question, payload.top_k, response_language=payload.response_language
+    )
     return schemas.AskResponse(**resultat, request_id=request_id)
 
 

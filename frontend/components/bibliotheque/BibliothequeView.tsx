@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { LayoutGrid, List, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { EmptyState } from "@/components/ui/StateViews";
 import type { DocumentItem } from "@/lib/types";
@@ -14,6 +15,7 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
   const [recherche, setRecherche] = useState("");
   const [tri, setTri] = useState<Tri>("nom");
   const [vue, setVue] = useState<"grille" | "liste">("grille");
+  const t = useTranslations("Bibliotheque");
 
   const documentsFiltres = useMemo(() => {
     const filtre = documents.filter((d) => d.nom_fichier.toLowerCase().includes(recherche.toLowerCase()));
@@ -35,22 +37,22 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
             type="search"
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
-            placeholder="Rechercher un document…"
-            aria-label="Rechercher un document"
+            placeholder={t("searchPlaceholder")}
+            aria-label={t("searchAriaLabel")}
             className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] py-2 pl-9 pr-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
           />
         </div>
 
         <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-          Trier par
+          {t("sortBy")}
           <select
             value={tri}
             onChange={(e) => setTri(e.target.value as Tri)}
             className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none"
           >
-            <option value="nom">Nom</option>
-            <option value="pages">Nombre de pages</option>
-            <option value="passages">Nombre de passages</option>
+            <option value="nom">{t("sortName")}</option>
+            <option value="pages">{t("sortPages")}</option>
+            <option value="passages">{t("sortPassages")}</option>
           </select>
         </label>
 
@@ -59,7 +61,7 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
             type="button"
             onClick={() => setVue("grille")}
             aria-pressed={vue === "grille"}
-            aria-label="Vue grille"
+            aria-label={t("gridView")}
             className={`rounded p-1.5 ${vue === "grille" ? "bg-primary/10 text-primary" : "text-[var(--text-muted)]"}`}
           >
             <LayoutGrid aria-hidden className="h-4 w-4" />
@@ -68,7 +70,7 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
             type="button"
             onClick={() => setVue("liste")}
             aria-pressed={vue === "liste"}
-            aria-label="Vue liste"
+            aria-label={t("listView")}
             className={`rounded p-1.5 ${vue === "liste" ? "bg-primary/10 text-primary" : "text-[var(--text-muted)]"}`}
           >
             <List aria-hidden className="h-4 w-4" />
@@ -79,7 +81,7 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
       </div>
 
       {documentsFiltres.length === 0 ? (
-        <EmptyState title="Aucun document ne correspond" description="Essayez un autre terme de recherche." />
+        <EmptyState title={t("emptyFilteredTitle")} description={t("emptyFilteredDescription")} />
       ) : (
         <div className={vue === "grille" ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3" : "flex flex-col gap-3"}>
           {documentsFiltres.map((document) => (

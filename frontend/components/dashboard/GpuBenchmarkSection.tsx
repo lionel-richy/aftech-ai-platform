@@ -1,12 +1,18 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 import { EmptyState } from "@/components/ui/StateViews";
 import type { ComparisonGpu } from "@/lib/gpuBenchmark";
 
 export function GpuBenchmarkSection({ comparaison }: { comparaison: ComparisonGpu }) {
+  const t = useTranslations("Dashboard");
+
   if (!comparaison.executed) {
     return (
       <EmptyState
-        title="Benchmark non exécuté"
-        description="Lancez ./scripts/run_gpu_benchmark.sh <T4|L4|A100> puis scripts/build_gpu_comparison.py pour remplir cette section."
+        title={t("benchmarkNotExecutedTitle")}
+        description={t("benchmarkNotExecutedDescription")}
       />
     );
   }
@@ -16,12 +22,12 @@ export function GpuBenchmarkSection({ comparaison }: { comparaison: ComparisonGp
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-            <th className="pb-2 pr-4">GPU</th>
-            <th className="pb-2 pr-4">VRAM</th>
-            <th className="pb-2 pr-4">Latence moy.</th>
-            <th className="pb-2 pr-4">Tokens/s</th>
-            <th className="pb-2 pr-4">Pic mémoire</th>
-            <th className="pb-2">Erreurs</th>
+            <th className="pb-2 pr-4">{t("benchmarkColGpu")}</th>
+            <th className="pb-2 pr-4">{t("benchmarkColVram")}</th>
+            <th className="pb-2 pr-4">{t("benchmarkColLatency")}</th>
+            <th className="pb-2 pr-4">{t("benchmarkColTokensPerSec")}</th>
+            <th className="pb-2 pr-4">{t("benchmarkColPeakMemory")}</th>
+            <th className="pb-2">{t("benchmarkColErrors")}</th>
           </tr>
         </thead>
         <tbody>
@@ -37,9 +43,7 @@ export function GpuBenchmarkSection({ comparaison }: { comparaison: ComparisonGp
           ))}
         </tbody>
       </table>
-      <p className="mt-3 text-xs text-[var(--text-muted)]">
-        Recommandation détaillée par cas d&apos;usage : voir results/benchmarks/gpu/recommendation.md
-      </p>
+      <p className="mt-3 text-xs text-[var(--text-muted)]">{t("benchmarkRecommendationNote")}</p>
     </div>
   );
 }

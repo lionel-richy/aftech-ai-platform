@@ -1,10 +1,15 @@
+import { getTranslations } from "next-intl/server";
+
 import { Topbar } from "@/components/layout/Topbar";
 import { ChatView } from "@/components/assistant/ChatView";
 
-export default function AssistantPage() {
+export default async function AssistantPage() {
+  const tNav = await getTranslations("Nav");
+  const t = await getTranslations("Assistant");
+
   return (
     <>
-      <Topbar title="Assistant IA" description="Posez une question sur les documents indexés." />
+      <Topbar title={tNav("assistant")} description={t("topbarDescription")} />
       <main className="flex-1 overflow-hidden">
         <ChatView />
       </main>

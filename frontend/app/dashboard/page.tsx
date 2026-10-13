@@ -1,4 +1,5 @@
 import { Activity, AlertCircle, Cpu, Database, FileStack, Gauge, Layers, Sparkles, Timer } from "lucide-react";
+import { getLocale, getTranslations } from "next-intl/server";
 
 import { Topbar } from "@/components/layout/Topbar";
 import { Card } from "@/components/ui/Card";
@@ -9,6 +10,7 @@ import { InstrumentationPlaceholders } from "@/components/dashboard/Instrumentat
 import { StatusBreakdownChart } from "@/components/dashboard/StatusBreakdownChart";
 import { appelerBackend } from "@/lib/backend";
 import { lireComparisonGpu } from "@/lib/gpuBenchmark";
+import { LOCALE_BCP47, type Locale } from "@/i18n/config";
 import type { HealthResponse, MetricsResponse } from "@/lib/types";
 
 // Données réelles à chaque requête (backend/CSV peuvent changer) : jamais
@@ -21,16 +23,21 @@ function formaterGo(octets: number): string {
 }
 
 export default async function DashboardPage() {
-  const [sante, metriques, comparaisonGpu] = await Promise.all([
+  const [sante, metriques, comparaisonGpu, locale, tNav, t] = await Promise.all([
     appelerBackend<HealthResponse>("/health", { authentifie: false }),
     appelerBackend<MetricsResponse>("/metrics"),
     lireComparisonGpu(),
+    getLocale(),
+    getTranslations("Nav"),
+    getTranslations("Dashboard"),
   ]);
+
+  const nombres = new Intl.NumberFormat(LOCALE_BCP47[locale as Locale]);
 
   if (!sante.ok) {
     return (
       <>
-        <Topbar title="Tableau de bord" />
+        <Topbar title={tNav("dashboard")} />
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <BackendUnavailableState description={sante.message} />
         </main>
@@ -43,60 +50,62 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <Topbar title="Tableau de bord" description="Uniquement des métriques réellement mesurées." />
+      <Topbar title={tNav("dashboard")} description={t("topbarDescription")} />
       <main className="flex-1 space-y-6 overflow-y-auto p-4 md:p-6">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile
-            label="Backend"
-            value={h.ready ? "Opérationnel" : "Dégradé"}
+            label={t("statBackend")}
+            value={h.ready ? t("statOperational") : t("statDegraded")}
             icon={<Activity className="h-4 w-4" aria-hidden />}
           />
-          <StatTile label="Documents" value={h.documents_count} icon={<FileStack className="h-4 w-4" aria-hidden />} />
-          <StatTile label="Passages indexés" value={h.chunks_count} icon={<Layers className="h-4 w-4" aria-hidden />} />
-          <StatTile label="GPU actif" value={h.gpu} icon={<Cpu className="h-4 w-4" aria-hidden />} />
-          <StatTile label="Modèle LLM" value={h.llm_model} icon={<Sparkles className="h-4 w-4" aria-hidden />} />
-          <StatTile label="Modèle d'embeddings" value={h.embedding_model} icon={<Database className="h-4 w-4" aria-hidden />} />
+          <StatTile label={t("statDocuments")} value={nombres.format(h.documents_count)} icon={<FileStack className="h-4 w-4" aria-hidden />} />
+          <StatTile label={t("statPassagesIndexed")} value={nombres.format(h.chunks_count)} icon={<Layers className="h-4 w-4" aria-hidden />} />
+          <StatTile label={t("statGpuActive")} value={h.gpu} icon={<Cpu className="h-4 w-4" aria-hidden />} />
+          <StatTile label={t("statLlmModel")} value={h.llm_model} icon={<Sparkles className="h-4 w-4" aria-hidden />} />
+          <StatTile label={t("statEmbeddingModel")} value={h.embedding_model} icon={<Database className="h-4 w-4" aria-hidden />} />
           <StatTile
-            label="Mémoire GPU"
+            label={t("statGpuMemory")}
             value={
               h.vram_utilisee_octets != null && h.vram_totale_octets != null
                 ? `${formaterGo(h.vram_utilisee_octets)} / ${formaterGo(h.vram_totale_octets)} Go`
                 : null
             }
-            unavailableReason={
-              h.vram_totale_octets == null ? "Aucun GPU actif (mode dégradé)." : undefined
-            }
+            unavailableReason={h.vram_totale_octets == null ? t("statGpuMemoryUnavailable") : undefined}
             icon={<Gauge className="h-4 w-4" aria-hidden />}
           />
           <StatTile
-            label="Latence moyenne"
+            label={t("statLatency")}
             value={m?.latence_moyenne_secondes != null ? `${m.latence_moyenne_secondes.toFixed(2)} s` : null}
-            unavailableReason={m?.latence_moyenne_secondes == null ? "Aucune requête mesurée pour l'instant." : undefined}
+            unavailableReason={m?.latence_moyenne_secondes == null ? t("statLatencyUnavailable") : undefined}
             icon={<Timer className="h-4 w-4" aria-hidden />}
           />
         </div>
 
         {m && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <StatTile label="Requêtes depuis le démarrage" value={m.requests_total} />
-            <StatTile label="Erreurs depuis le démarrage" value={m.errors_total} icon={<AlertCircle className="h-4 w-4" aria-hidden />} />
+            <StatTile label={t("statRequestsTotal")} value={nombres.format(m.requests_total)} />
+            <StatTile
+              label={t("statErrorsTotal")}
+              value={nombres.format(m.errors_total)}
+              icon={<AlertCircle className="h-4 w-4" aria-hidden />}
+            />
           </div>
         )}
 
         <Card>
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Répartition des statuts</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t("statusBreakdownTitle")}</h2>
           <div className="mt-3">{m ? <StatusBreakdownChart metrics={m} /> : <BackendUnavailableState />}</div>
         </Card>
 
         <Card>
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Comparaison GPU (T4 / L4 / A100)</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t("gpuComparisonTitle")}</h2>
           <div className="mt-3">
             <GpuBenchmarkSection comparaison={comparaisonGpu} />
           </div>
         </Card>
 
         <div>
-          <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Métriques à venir</h2>
+          <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">{t("instrumentationTitle")}</h2>
           <InstrumentationPlaceholders />
         </div>
       </main>

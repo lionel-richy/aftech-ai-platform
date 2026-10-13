@@ -26,37 +26,76 @@ LLM_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
 MAX_NEW_TOKENS = 400
 CITATION_MAX_CARACTERES = 200
 
-REPONSE_NON_TROUVEE = "Information non trouvée dans les documents."
+LANGUES_SUPPORTEES = ("fr", "en", "de")
+
+# Une phrase "non trouvée" par langue de réponse (response_language) — jamais
+# une traduction automatique à la volée : le texte est fixe et validé pour
+# chaque langue, comme REPONSE_NON_TROUVEE l'était déjà pour le français.
+REPONSE_NON_TROUVEE_PAR_LANGUE = {
+    "fr": "Information non trouvée dans les documents.",
+    "en": "Information not found in the documents.",
+    "de": "Information in den Dokumenten nicht gefunden.",
+}
+REPONSE_NON_TROUVEE = REPONSE_NON_TROUVEE_PAR_LANGUE["fr"]
+
+# Suffixe "[source : fichier, page N]" ajouté après chaque affirmation
+# validée — jamais traduit : fichier et libellé de page restent neutres/
+# fidèles à la source, seul le connecteur ("source"/"source"/"Quelle") change.
+SOURCE_SUFFIXE_PAR_LANGUE = {
+    "fr": "[source : {fichier}, page {page}]",
+    "en": "[source: {fichier}, page {page}]",
+    "de": "[Quelle: {fichier}, Seite {page}]",
+}
+
+NOM_LANGUE_PAR_CODE = {"fr": "français", "en": "English", "de": "Deutsch"}
+
 SEUIL_STATUT_COMPLETE = 3
 
-SYSTEM_PROMPT = (
-    "Tu es un assistant documentaire. Tu réponds toujours en français. Les "
-    "passages fournis peuvent provenir de documents différents et sont "
-    "identifiés par P1, P2, P3, etc. Tu dois répondre UNIQUEMENT à partir de "
-    "ces passages. Ne complète jamais avec tes connaissances générales, même "
-    "si tu penses connaître la réponse.\n\n"
-    "Si les passages ne contiennent pas clairement la réponse, réponds "
-    f'uniquement avec la phrase exacte : "{REPONSE_NON_TROUVEE}" (rien d\'autre).\n\n'
-    "Sinon, découpe ta réponse en affirmations séparées : une seule affirmation "
-    "pour une réponse simple, ou une affirmation distincte par élément si la "
-    "réponse est une liste ou une synthèse à plusieurs points (6 éléments "
-    "maximum). Pour CHAQUE affirmation, utilise STRICTEMENT ce format, sur 4 "
-    "lignes :\n"
-    "AFFIRMATION: <une seule affirmation, phrase complète>\n"
-    "PASSAGE: <identifiant, ex. P2>\n"
-    "PAGE: <numéro de page>\n"
-    f'CITATION: "<citation copiée EXACTEMENT depuis ce passage, {CITATION_MAX_CARACTERES} '
-    'caractères maximum>"\n\n'
-    "Répète ce bloc de 4 lignes pour chaque affirmation. Termine toujours tes phrases.\n\n"
-    "Cas particulier important : si la question demande QUEL document, fichier "
-    "ou passage traite d'un sujet (par exemple \"quel document parle de X ?\"), "
-    "ne réponds PAS \"non trouvée\" simplement parce qu'aucune phrase ne dit "
-    "littéralement \"ce document parle de X\" — il suffit qu'un passage "
-    "contienne clairement des informations sur ce sujet pour que tu puisses "
-    "répondre. Dans ce cas, formule l'AFFIRMATION comme une information "
-    "concrète tirée de ce passage (pas besoin de deviner ou de répéter le nom "
-    "du fichier : il sera ajouté automatiquement à partir du passage cité)."
-)
+
+def construire_system_prompt(langue: str) -> str:
+    """Prompt système, paramétré par la langue de RÉPONSE demandée.
+
+    La CITATION doit toujours rester une copie exacte du passage source, donc
+    dans sa langue D'ORIGINE, même quand la langue de réponse diffère — c'est
+    explicite ci-dessous pour éviter que Qwen ne "traduise" une citation."""
+    nom_langue = NOM_LANGUE_PAR_CODE[langue]
+    reponse_non_trouvee = REPONSE_NON_TROUVEE_PAR_LANGUE[langue]
+    return (
+        f"Tu es un assistant documentaire. Tu réponds TOUJOURS en {nom_langue}, "
+        "quelle que soit la langue des passages fournis ou de la question : "
+        "traduis le SENS de ta réponse (l'AFFIRMATION) en cette langue si "
+        "besoin. Les passages fournis peuvent provenir de documents "
+        "différents et sont identifiés par P1, P2, P3, etc. Tu dois répondre "
+        "UNIQUEMENT à partir de ces passages. Ne complète jamais avec tes "
+        "connaissances générales, même si tu penses connaître la réponse.\n\n"
+        "Si les passages ne contiennent pas clairement la réponse, réponds "
+        f'uniquement avec la phrase exacte : "{reponse_non_trouvee}" (rien d\'autre).\n\n'
+        "Sinon, découpe ta réponse en affirmations séparées : une seule affirmation "
+        "pour une réponse simple, ou une affirmation distincte par élément si la "
+        "réponse est une liste ou une synthèse à plusieurs points (6 éléments "
+        "maximum). Pour CHAQUE affirmation, utilise STRICTEMENT ce format, sur 4 "
+        "lignes :\n"
+        f"AFFIRMATION: <une seule affirmation, phrase complète, en {nom_langue}>\n"
+        "PASSAGE: <identifiant, ex. P2>\n"
+        "PAGE: <numéro de page>\n"
+        f'CITATION: "<citation copiée EXACTEMENT depuis ce passage, dans sa langue '
+        f"D'ORIGINE (ne la traduis jamais), {CITATION_MAX_CARACTERES} "
+        'caractères maximum>"\n\n'
+        "Répète ce bloc de 4 lignes pour chaque affirmation. Termine toujours tes phrases.\n\n"
+        "Cas particulier important : si la question demande QUEL document, fichier "
+        "ou passage traite d'un sujet (par exemple \"quel document parle de X ?\"), "
+        "ne réponds PAS \"non trouvée\" simplement parce qu'aucune phrase ne dit "
+        "littéralement \"ce document parle de X\" — il suffit qu'un passage "
+        "contienne clairement des informations sur ce sujet pour que tu puisses "
+        "répondre. Dans ce cas, formule l'AFFIRMATION comme une information "
+        "concrète tirée de ce passage (pas besoin de deviner ou de répéter le nom "
+        "du fichier : il sera ajouté automatiquement à partir du passage cité)."
+    )
+
+
+# Conservé pour compatibilité (tests existants, scripts) : prompt par défaut
+# en français — identique à construire_system_prompt("fr").
+SYSTEM_PROMPT = construire_system_prompt("fr")
 
 VERIFICATEUR_SYSTEM_PROMPT = (
     "Tu es un vérificateur strict. Tu reçois une question, une affirmation et une "
@@ -321,9 +360,11 @@ class RagEngine:
             return False
         return "SUPPORTED" in verdict_brut
 
-    def ask(self, question: str, top_k: int = 8) -> dict:
+    def ask(self, question: str, top_k: int = 8, response_language: str = "fr") -> dict:
         if not self.ready:
             raise BackendUnavailable(self.error or "Moteur RAG non prêt.")
+        if response_language not in LANGUES_SUPPORTEES:
+            raise ValueError(f"Langue de réponse non supportée : {response_language!r}")
 
         import time
 
@@ -335,7 +376,7 @@ class RagEngine:
 
         debut_generation = time.perf_counter()
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": construire_system_prompt(response_language)},
             {"role": "user", "content": self._construire_prompt(question, passages)},
         ]
         reponse_brute, nb_tokens_entree, nb_tokens_generes = self._generer_texte(messages, MAX_NEW_TOKENS)
@@ -363,17 +404,19 @@ class RagEngine:
         temps_generation = time.perf_counter() - debut_generation
 
         validees = [a for a in affirmations if a["affirmation_validee"]]
+        suffixe_source = SOURCE_SUFFIXE_PAR_LANGUE[response_language]
 
         if not validees:
-            answer = REPONSE_NON_TROUVEE
+            answer = REPONSE_NON_TROUVEE_PAR_LANGUE[response_language]
             statut = "NOT_FOUND"
         elif len(validees) == 1:
             a = validees[0]
-            answer = f"{a['affirmation']} [source : {a['fichier']}, page {a['page']}]"
+            answer = f"{a['affirmation']} {suffixe_source.format(fichier=a['fichier'], page=a['page'])}"
             statut = "COMPLETE"
         else:
             answer = "\n".join(
-                f"- {a['affirmation']} [source : {a['fichier']}, page {a['page']}]" for a in validees
+                f"- {a['affirmation']} {suffixe_source.format(fichier=a['fichier'], page=a['page'])}"
+                for a in validees
             )
             statut = "COMPLETE" if len(validees) >= SEUIL_STATUT_COMPLETE else "PARTIAL"
 

@@ -29,6 +29,7 @@ export async function appelerBackend<T>(
     return {
       ok: false,
       status: 500,
+      code: "api_key_missing",
       message: "BACKEND_API_KEY n'est pas configurée côté serveur Next.js.",
     };
   }
@@ -52,15 +53,20 @@ export async function appelerBackend<T>(
 
     if (!reponse.ok) {
       let message = `Le backend a répondu ${reponse.status}.`;
+      // "code" n'est posé QUE pour le message générique ci-dessus (que NOUS
+      // générons) : si le backend a renvoyé son propre "detail", ce texte
+      // reste un passthrough non traduit (comme une citation), sans code.
+      let code: "backend_error_status" | undefined = "backend_error_status";
       try {
         const corpsErreur = await reponse.json();
         if (typeof corpsErreur?.detail === "string") {
           message = corpsErreur.detail;
+          code = undefined;
         }
       } catch {
         // Corps non-JSON : on garde le message générique ci-dessus.
       }
-      return { ok: false, status: reponse.status, message };
+      return { ok: false, status: reponse.status, message, code, values: code ? { status: reponse.status } : undefined };
     }
 
     const donnees = (await reponse.json()) as T;
@@ -74,6 +80,7 @@ export async function appelerBackend<T>(
     return {
       ok: false,
       status: estTimeout ? 504 : 503,
+      code: estTimeout ? "timeout_no_response" : "backend_unreachable",
       message: estTimeout
         ? "Le backend n'a pas répondu à temps (démarrage à froid trop long ?)."
         : "Impossible de contacter le backend (indisponible ?).",

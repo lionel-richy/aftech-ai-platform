@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 
 export function StatTile({
   label,
@@ -12,6 +15,8 @@ export function StatTile({
   /** Si fourni, affiche "Non disponible" au lieu de `value` — jamais de chiffre inventé. */
   unavailableReason?: string;
 }) {
+  const t = useTranslations("Dashboard");
+
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="flex items-center justify-between">
@@ -20,7 +25,7 @@ export function StatTile({
       </div>
       <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
         {unavailableReason ? (
-          <span className="text-base font-normal text-[var(--text-muted)]">Non disponible</span>
+          <span className="text-base font-normal text-[var(--text-muted)]">{t("notAvailable")}</span>
         ) : (
           value
         )}

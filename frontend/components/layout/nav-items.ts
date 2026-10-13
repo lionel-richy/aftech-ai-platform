@@ -3,14 +3,14 @@ import { Blocks, LayoutDashboard, Library, MessageSquare, ShieldCheck } from "lu
 
 export interface NavItem {
   href: string;
-  label: string;
+  labelKey: "assistant" | "bibliotheque" | "dashboard" | "administration" | "integrations";
   icon: LucideIcon;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/assistant", label: "Assistant IA", icon: MessageSquare },
-  { href: "/bibliotheque", label: "Bibliothèque", icon: Library },
-  { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
-  { href: "/administration", label: "Administration", icon: ShieldCheck },
-  { href: "/integrations", label: "Intégrations", icon: Blocks },
+  { href: "/assistant", labelKey: "assistant", icon: MessageSquare },
+  { href: "/bibliotheque", labelKey: "bibliotheque", icon: Library },
+  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
+  { href: "/administration", labelKey: "administration", icon: ShieldCheck },
+  { href: "/integrations", labelKey: "integrations", icon: Blocks },
 ];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import type { HealthResponse } from "@/lib/types";
 
@@ -8,6 +9,7 @@ type Etat = "chargement" | "ok" | "degrade" | "inaccessible";
 
 export function BackendStatusIndicator({ compact = false }: { compact?: boolean }) {
   const [etat, setEtat] = useState<Etat>("chargement");
+  const t = useTranslations("BackendStatus");
 
   useEffect(() => {
     let annule = false;
@@ -35,10 +37,10 @@ export function BackendStatusIndicator({ compact = false }: { compact?: boolean 
   }, []);
 
   const STYLES: Record<Etat, { couleur: string; label: string }> = {
-    chargement: { couleur: "bg-[var(--text-muted)]", label: "Vérification…" },
-    ok: { couleur: "bg-success", label: "Backend opérationnel" },
-    degrade: { couleur: "bg-warning", label: "Backend dégradé (pas de GPU)" },
-    inaccessible: { couleur: "bg-danger", label: "Backend inaccessible" },
+    chargement: { couleur: "bg-[var(--text-muted)]", label: t("checking") },
+    ok: { couleur: "bg-success", label: t("ok") },
+    degrade: { couleur: "bg-warning", label: t("degraded") },
+    inaccessible: { couleur: "bg-danger", label: t("unreachable") },
   };
 
   const { couleur, label } = STYLES[etat];
