@@ -99,7 +99,17 @@ def web():
 # Image MINIMALE pour la disponibilité : aucune dépendance ML (ni torch, ni
 # transformers, ni faiss) — juste FastAPI, pour un démarrage quasi instantané,
 # totalement indépendante de `image` (celle de web(), ci-dessus).
-image_disponibilite = modal.Image.debian_slim(python_version="3.11").pip_install("fastapi")
+#
+# add_local_python_source("app") est nécessaire ici aussi : Modal importe
+# TOUT le fichier modal_app.py (donc `from app.gpu_config import
+# resoudre_gpu_type` ci-dessus, utilisé par web()) dans le conteneur de
+# CHAQUE fonction qu'il contient, y compris availability() — sans ça,
+# ModuleNotFoundError("No module named 'app'") fait crash-looper ce
+# conteneur (bug réel rencontré lors du déploiement v4, corrigé ici).
+# app.gpu_config ne fait "import os" : aucune dépendance ML n'est ajoutée.
+image_disponibilite = (
+    modal.Image.debian_slim(python_version="3.11").pip_install("fastapi").add_local_python_source("app")
+)
 
 
 @app.function(
