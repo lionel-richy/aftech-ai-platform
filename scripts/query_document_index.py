@@ -37,7 +37,10 @@ EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
 LLM_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
 
 TOP_K = 8  # nombre de passages recherchés, tous documents confondus
-MAX_NEW_TOKENS = 400
+# 900 (pas 400) : bug réel diagnostiqué en production (backend/app/rag_engine.py)
+# — Qwen ajoute parfois un paragraphe d'introduction avant le bloc structuré,
+# ce qui pouvait épuiser le budget de tokens avant la fin de la CITATION.
+MAX_NEW_TOKENS = 900
 CITATION_MAX_CARACTERES = 200
 
 REPONSE_NON_TROUVEE = "Information non trouvée dans les documents."
@@ -67,8 +70,10 @@ SYSTEM_PROMPT = (
     "Sinon, découpe ta réponse en affirmations séparées : une seule affirmation "
     "pour une réponse simple, ou une affirmation distincte par élément si la "
     "réponse est une liste ou une synthèse à plusieurs points (6 éléments "
-    "maximum). Pour CHAQUE affirmation, utilise STRICTEMENT ce format, sur 4 "
-    "lignes :\n"
+    "maximum). Ne commence JAMAIS par un paragraphe d'introduction, un résumé "
+    "ou une reformulation de la question avant le bloc structuré : ta toute "
+    "première ligne doit être \"AFFIRMATION:\". Pour CHAQUE affirmation, "
+    "utilise STRICTEMENT ce format, sur 4 lignes :\n"
     "AFFIRMATION: <une seule affirmation, phrase complète>\n"
     "PASSAGE: <identifiant, ex. P2>\n"
     "PAGE: <numéro de page>\n"
@@ -177,11 +182,14 @@ def normalize_text(texte):
     return texte.lower()
 
 
+# CITATION se termine par un guillemet fermant OU la fin du texte (\Z) :
+# filet de sécurité si la génération est coupée par MAX_NEW_TOKENS (bug réel
+# diagnostiqué en production, voir backend/app/rag_engine.py).
 PATTERN_AFFIRMATION = re.compile(
     r"AFFIRMATION\s*:\s*(?P<affirmation>.+?)\s*"
     r"PASSAGE\s*:\s*(?P<passage_id>\S+)\s*"
     r"PAGE\s*:\s*(?P<page>\d+)\s*"
-    r'CITATION\s*:\s*"(?P<citation>.+?)"',
+    r'CITATION\s*:\s*"(?P<citation>.+?)(?:"|\Z)',
     re.IGNORECASE | re.DOTALL,
 )
 

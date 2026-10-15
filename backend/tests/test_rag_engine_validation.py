@@ -239,3 +239,48 @@ class TestRejetsDeSecurite:
         resultat = engine.ask("Que propose Azure comme stockage ?")
 
         assert resultat["status"] == "NOT_FOUND"
+
+
+class TestCitationTronqueeParMaxNewTokens:
+    """Bug réel diagnostiqué en production (question française sur l'EU AI
+    Act, logs "[rag_engine] aucune AFFIRMATION parsée") : Qwen ajoute parfois
+    un paragraphe d'introduction avant le bloc structuré, ce qui pouvait
+    épuiser MAX_NEW_TOKENS avant la guillemet fermante de CITATION — le bloc
+    entier devenait alors illisible par le regex, malgré un essai réel et
+    une citation fidèle. Corrigé en acceptant aussi une citation terminée
+    par la fin du texte généré (voir PATTERN_AFFIRMATION)."""
+
+    def test_citation_tronquee_sans_guillemet_fermante_est_quand_meme_acceptee(self, monkeypatch):
+        engine = construire_engine([CHUNK_AZURE])
+        citation_tronquee = CHUNK_AZURE["texte"][:40]  # préfixe fidèle, pas de guillemet fermante
+        texte_genere_tronque = (
+            "Azure est une plateforme complète.\n\n"  # préambule parasite, comme en production
+            "AFFIRMATION: Azure propose des types de ressources variés.\n"
+            "PASSAGE: P1\n"
+            "PAGE: 12\n"
+            f'CITATION: "{citation_tronquee}'  # coupé ici, AUCUNE guillemet fermante
+        )
+        monkeypatch.setattr(engine, "_generer_texte", simuler_generation([texte_genere_tronque, "SUPPORTED"]))
+
+        resultat = engine.ask("Quel document contient des informations relatives à Azure ?")
+
+        assert resultat["status"] in ("COMPLETE", "PARTIAL")
+        assert len(resultat["validated_claims"]) == 1
+        assert resultat["validated_claims"][0]["citation_presente"] is True
+
+    def test_citation_tronquee_qui_ne_correspond_a_rien_reste_rejetee(self, monkeypatch):
+        """Le filet de sécurité ne doit jamais fabriquer une validation :
+        une citation tronquée qui n'est PAS un vrai préfixe du passage reste
+        rejetée, exactement comme avant ce correctif."""
+        engine = construire_engine([CHUNK_AZURE])
+        texte_genere = (
+            "AFFIRMATION: Azure propose des types de ressources variés.\n"
+            "PASSAGE: P1\n"
+            "PAGE: 12\n"
+            'CITATION: "ceci est une citation inventée, jamais dans le passage'
+        )
+        monkeypatch.setattr(engine, "_generer_texte", simuler_generation([texte_genere]))
+
+        resultat = engine.ask("Quel document contient des informations relatives à Azure ?")
+
+        assert resultat["status"] == "NOT_FOUND"

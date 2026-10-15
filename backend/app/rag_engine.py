@@ -23,7 +23,15 @@ INDEX_DIR_DEFAULT = os.environ.get("INDEX_DIR", "data/indexes/aftech_documents")
 EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
 LLM_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
 
-MAX_NEW_TOKENS = 400
+# Bug réel diagnostiqué en production (voir logs "[rag_engine] aucune
+# AFFIRMATION parsée") : pour certaines questions/langues, Qwen ajoute un
+# paragraphe d'introduction en prose AVANT le bloc structuré demandé — avec
+# 400 tokens, ce préambule pouvait à lui seul épuiser le budget avant la fin
+# de la CITATION (coupée sans guillemet fermante), rendant tout le bloc
+# illisible par PATTERN_AFFIRMATION malgré un essai réel et une citation
+# fidèle. 900 laisse la marge nécessaire même avec un tel préambule + une
+# citation longue (jusqu'à CITATION_MAX_CARACTERES).
+MAX_NEW_TOKENS = 900
 CITATION_MAX_CARACTERES = 200
 
 LANGUES_SUPPORTEES = ("fr", "en", "de")
@@ -73,8 +81,10 @@ def construire_system_prompt(langue: str) -> str:
         "Sinon, découpe ta réponse en affirmations séparées : une seule affirmation "
         "pour une réponse simple, ou une affirmation distincte par élément si la "
         "réponse est une liste ou une synthèse à plusieurs points (6 éléments "
-        "maximum). Pour CHAQUE affirmation, utilise STRICTEMENT ce format, sur 4 "
-        "lignes :\n"
+        "maximum). Ne commence JAMAIS par un paragraphe d'introduction, un résumé "
+        "ou une reformulation de la question avant le bloc structuré : ta toute "
+        "première ligne doit être \"AFFIRMATION:\". Pour CHAQUE affirmation, "
+        "utilise STRICTEMENT ce format, sur 4 lignes :\n"
         f"AFFIRMATION: <une seule affirmation, phrase complète, en {nom_langue}>\n"
         "PASSAGE: <identifiant, ex. P2>\n"
         "PAGE: <numéro de page>\n"
@@ -124,11 +134,17 @@ def normalize_text(texte: str) -> str:
     return texte.lower()
 
 
+# CITATION se termine par un guillemet fermant OU la fin du texte (\Z) :
+# filet de sécurité si la génération est coupée par MAX_NEW_TOKENS avant la
+# guillemet fermante (bug réel diagnostiqué en production — voir
+# MAX_NEW_TOKENS plus haut). Une citation tronquée reste un PRÉFIXE fidèle
+# du passage source : citation_presente (substring exact) continue de la
+# valider correctement, plutôt que de perdre tout le bloc sans guillemet.
 PATTERN_AFFIRMATION = re.compile(
     r"AFFIRMATION\s*:\s*(?P<affirmation>.+?)\s*"
     r"PASSAGE\s*:\s*(?P<passage_id>\S+)\s*"
     r"PAGE\s*:\s*(?P<page>\d+)\s*"
-    r'CITATION\s*:\s*"(?P<citation>.+?)"',
+    r'CITATION\s*:\s*"(?P<citation>.+?)(?:"|\Z)',
     re.IGNORECASE | re.DOTALL,
 )
 
