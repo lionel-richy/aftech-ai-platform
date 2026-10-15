@@ -1,0 +1,27 @@
+# PostgreSQL LOCAL, pour le développement uniquement — jamais déployé, jamais
+# utilisé en production sur Modal (voir docs/DATABASE.md). Aucune donnée
+# sensible ici : mot de passe de développement, volontairement simple.
+#
+# Démarrer :   cd backend && docker compose up -d
+# Arrêter :    docker compose down          (garde les données)
+# Tout effacer : docker compose down -v     (supprime aussi le volume)
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aftech-postgres-dev
+    environment:
+      POSTGRES_USER: aftech
+      POSTGRES_PASSWORD: aftech-dev-local
+      POSTGRES_DB: aftech
+    ports:
+      - "5432:5432"
+    volumes:
+      - aftech_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aftech -d aftech"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  aftech_postgres_data:

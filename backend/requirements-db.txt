@@ -1,0 +1,12 @@
+# Couche de persistance PostgreSQL — DÉVELOPPEMENT LOCAL UNIQUEMENT.
+# Volontairement SÉPARÉ de requirements.txt (qui est embarqué dans l'image
+# Modal "web" via pip_install_from_requirements) : Postgres n'est PAS encore
+# déployé, ces paquets ne doivent jamais alourdir l'image GPU de production.
+# Installer avec : pip install -r requirements-db.txt
+
+sqlalchemy>=2.0
+greenlet>=3.0        # requis par le moteur async de SQLAlchemy
+alembic>=1.13
+asyncpg>=0.29        # driver async, utilisé par l'application (app/db/session.py)
+psycopg[binary]>=3.1  # driver sync, utilisé par Alembic pour exécuter les migrations
+pytest-asyncio>=0.23  # tests d'intégration DB réels (async), voir tests/test_db_*.py
