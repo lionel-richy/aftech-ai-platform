@@ -440,6 +440,27 @@ class RagEngine:
             aff["fichier"] = passage["source"] if passage else None
             aff["page"] = passage["page"] if passage else aff["page"]
 
+            if not aff["affirmation_validee"]:
+                # Diagnostic PERMANENT (pas une sonde à retirer) : une
+                # affirmation rejetée malgré un essai réel de Qwen est
+                # justement le cas le plus difficile à déboguer sans ça — on
+                # ne voit normalement jamais ce texte (l'API ne renvoie que
+                # les affirmations validées). Rien de sensible : juste le
+                # texte généré par le modèle sur un document déjà indexé.
+                print(
+                    "[rag_engine] affirmation rejetée — "
+                    f"langue={response_language!r} passage_id={aff['passage_id']!r} "
+                    f"citation_presente={citation_presente} "
+                    f"preuve_supported={aff['preuve_supported']} "
+                    f"affirmation={aff['affirmation']!r} "
+                    f"citation={aff['citation']!r}"
+                )
+        if not affirmations:
+            print(
+                f"[rag_engine] aucune AFFIRMATION parsée — langue={response_language!r} "
+                f"reponse_brute={reponse_brute!r}"
+            )
+
         temps_generation = time.perf_counter() - debut_generation
 
         validees = [a for a in affirmations if a["affirmation_validee"]]
