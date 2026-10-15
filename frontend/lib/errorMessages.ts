@@ -58,6 +58,7 @@ const CODE_VERS_EXPLICATION: Record<
   }),
   timeout_no_response: () => ({ titreKey: "timeoutTitle", descriptionKey: "timeoutDescription", type: "indisponible" }),
   backend_unreachable: () => ({ titreKey: "unavailableTitle", descriptionKey: "unavailableDefault", type: "indisponible" }),
+  no_file: () => ({ titreKey: "validationTitle", descriptionKey: "validationDefault", type: "erreur" }),
 };
 
 export function expliquerErreurHttp(

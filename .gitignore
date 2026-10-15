@@ -27,4 +27,5 @@ frontend/.env*.local
 data/indexes/
 data/documents/
 data/sample_pdf/
+data/document_store/
 results/

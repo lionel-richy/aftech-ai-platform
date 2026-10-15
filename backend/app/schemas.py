@@ -61,6 +61,9 @@ class HealthResponse(BaseModel):
     chunks_count: int
 
 
+DocumentStatus = Literal["UPLOADED", "EXTRACTING", "INDEXING", "READY", "FAILED", "DELETING"]
+
+
 class DocumentItem(BaseModel):
     nom_fichier: str
     pages: int
@@ -68,6 +71,30 @@ class DocumentItem(BaseModel):
     hash_sha256: str
     modele_embeddings: str
     date_index: str
+    # Présents seulement pour les documents gérés via l'upload (Bibliothèque) ;
+    # None pour les documents "historiques" déjà indexés avant cette
+    # fonctionnalité (dont on n'a jamais eu le PDF d'origine — non supprimables).
+    id: Optional[str] = None
+    statut: Optional[DocumentStatus] = None
+    message_erreur: Optional[str] = None
+    taille_octets: Optional[int] = None
+    supprimable: bool = False
+
+
+class DocumentUploadResponse(BaseModel):
+    id: str
+    nom_original: str
+    statut: DocumentStatus
+
+
+class DocumentStatusResponse(BaseModel):
+    id: str
+    nom_original: str
+    statut: DocumentStatus
+    message_erreur: Optional[str] = None
+    nb_pages: int
+    nb_passages: int
+    date_ajout: str
 
 
 class MetricsResponse(BaseModel):

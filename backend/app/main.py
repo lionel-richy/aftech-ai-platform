@@ -12,20 +12,44 @@ Différences connues avec l'API OpenAI officielle (/v1/chat/completions) :
 - pas de streaming (pas de `stream: true`) dans cette version.
 """
 
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import schemas
+from .document_manager import DocumentDejaIndexe, DocumentIntrouvable, DocumentManager
+from .document_pipeline import FichierInvalide
+from .index_builder import ReconstructionDejaEnCours
 from .metrics import metrics_store
 from .rag_engine import BackendUnavailable, RagEngine
 from .security import get_cors_origins, verify_api_key
 
 API_VERSION = "0.1.0"
 LIMITE_QUESTION_CARACTERES = 2000
+DOCUMENT_STORE_DIR = os.environ.get("DOCUMENT_STORE_DIR", "data/document_store")
+TAILLE_MAX_UPLOAD_OCTETS = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024
+
+
+def _callback_commit_volume_si_modal():
+    """None en local/tests (pas de `modal` requis). Sur Modal, modal_app.py
+    définit DOCUMENT_STORE_VOLUME_NAME : on committe le Volume après chaque
+    écriture durable pour qu'elle survive à un redémarrage de conteneur —
+    import de `modal` PARESSEUX (jamais au niveau module), comme pour
+    torch/faiss dans rag_engine.py."""
+    nom_volume = os.environ.get("DOCUMENT_STORE_VOLUME_NAME")
+    if not nom_volume:
+        return None
+
+    def _commit() -> None:
+        import modal
+
+        modal.Volume.from_name(nom_volume).commit()
+
+    return _commit
 
 
 @asynccontextmanager
@@ -35,6 +59,12 @@ async def lifespan(app: FastAPI):
     engine = RagEngine()
     engine.load()
     app.state.engine = engine
+    # Dégradé proprement si l'engine n'a pas pu charger l'embedder (ex. pas
+    # d'index du tout en local) : DocumentManager a juste besoin de
+    # engine.embedder, pas de Qwen — voir document_manager.py.
+    app.state.document_manager = DocumentManager(
+        DOCUMENT_STORE_DIR, engine, TAILLE_MAX_UPLOAD_OCTETS, on_mutation=_callback_commit_volume_si_modal()
+    )
     yield
 
 
@@ -51,6 +81,10 @@ app.add_middleware(
 
 def get_engine(request: Request) -> RagEngine:
     return request.app.state.engine
+
+
+def get_document_manager(request: Request) -> DocumentManager:
+    return request.app.state.document_manager
 
 
 def _repondre_ou_erreur(
@@ -97,8 +131,67 @@ async def availability() -> dict:
     response_model=list[schemas.DocumentItem],
     dependencies=[Depends(verify_api_key)],
 )
-async def list_documents(engine: RagEngine = Depends(get_engine)) -> list[dict]:
-    return engine.documents()
+async def list_documents(gestionnaire: DocumentManager = Depends(get_document_manager)) -> list[dict]:
+    return gestionnaire.lister_tout()
+
+
+@app.post(
+    "/documents",
+    response_model=schemas.DocumentUploadResponse,
+    status_code=201,
+    dependencies=[Depends(verify_api_key)],
+)
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    fichier: UploadFile,
+    gestionnaire: DocumentManager = Depends(get_document_manager),
+) -> schemas.DocumentUploadResponse:
+    contenu = await fichier.read()
+    try:
+        enregistrement = gestionnaire.deposer(contenu, fichier.filename or "document.pdf")
+    except FichierInvalide as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DocumentDejaIndexe as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # Extraction + indexation en tâche de fond : la réponse HTTP revient tout
+    # de suite (statut UPLOADED), le client suit la progression via
+    # GET /documents/{id} (EXTRACTING -> INDEXING -> READY/FAILED).
+    background_tasks.add_task(gestionnaire.traiter, enregistrement.id)
+
+    return schemas.DocumentUploadResponse(
+        id=enregistrement.id, nom_original=enregistrement.nom_original, statut=enregistrement.statut
+    )
+
+
+@app.get(
+    "/documents/{id_document}/status",
+    response_model=schemas.DocumentStatusResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def document_status(
+    id_document: str, gestionnaire: DocumentManager = Depends(get_document_manager)
+) -> schemas.DocumentStatusResponse:
+    doc = gestionnaire.obtenir_statut(id_document)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+    return schemas.DocumentStatusResponse(**doc)
+
+
+@app.delete(
+    "/documents/{id_document}",
+    status_code=204,
+    dependencies=[Depends(verify_api_key)],
+)
+async def delete_document(
+    id_document: str, gestionnaire: DocumentManager = Depends(get_document_manager)
+) -> None:
+    try:
+        gestionnaire.supprimer(id_document)
+    except DocumentIntrouvable as exc:
+        raise HTTPException(status_code=404, detail="Document introuvable.") from exc
+    except ReconstructionDejaEnCours as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/metrics", response_model=schemas.MetricsResponse, dependencies=[Depends(verify_api_key)])

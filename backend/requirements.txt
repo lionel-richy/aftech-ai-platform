@@ -2,6 +2,7 @@
 # et en plein mode sur Modal avec GPU attaché).
 
 fastapi>=0.115.0
+python-multipart>=0.0.9  # requis par FastAPI pour UploadFile (POST /documents)
 uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
 python-dotenv>=1.0.0
@@ -17,6 +18,7 @@ bitsandbytes
 sentencepiece
 sentence-transformers
 faiss-cpu
+pypdf  # extraction de texte PDF + validation réelle des fichiers déposés (voir app/document_pipeline.py)
 
 # Tests
 pytest>=8.0.0

@@ -16,8 +16,11 @@ const BACKEND_API_KEY = process.env.BACKEND_API_KEY;
 const BACKEND_AVAILABILITY_URL = process.env.BACKEND_AVAILABILITY_URL ?? "http://localhost:8000";
 
 interface AppelBackendOptions {
-  methode?: "GET" | "POST";
-  corps?: unknown;
+  methode?: "GET" | "POST" | "DELETE";
+  // FormData : passée telle quelle (upload multipart) — Content-Type et sa
+  // boundary sont posés automatiquement par fetch, JAMAIS par nous (sinon la
+  // boundary déclarée ne correspondrait plus au corps réel).
+  corps?: unknown | FormData;
   authentifie?: boolean; // false pour /health, qui ne demande pas de clé
   timeoutMs?: number;
 }
@@ -37,7 +40,8 @@ export async function appelerBackend<T>(
     };
   }
 
-  const entetes: Record<string, string> = { "Content-Type": "application/json" };
+  const estFormData = typeof FormData !== "undefined" && corps instanceof FormData;
+  const entetes: Record<string, string> = estFormData ? {} : { "Content-Type": "application/json" };
   if (authentifie) {
     entetes.Authorization = `Bearer ${BACKEND_API_KEY}`;
   }
@@ -49,7 +53,7 @@ export async function appelerBackend<T>(
     const reponse = await fetch(`${BACKEND_BASE_URL}${chemin}`, {
       method: methode,
       headers: entetes,
-      body: corps !== undefined ? JSON.stringify(corps) : undefined,
+      body: estFormData ? (corps as FormData) : corps !== undefined ? JSON.stringify(corps) : undefined,
       signal: controleur.signal,
       cache: "no-store",
     });
@@ -72,6 +76,9 @@ export async function appelerBackend<T>(
       return { ok: false, status: reponse.status, message, code, values: code ? { status: reponse.status } : undefined };
     }
 
+    if (reponse.status === 204) {
+      return { ok: true, data: undefined as T };
+    }
     const donnees = (await reponse.json()) as T;
     return { ok: true, data: donnees };
   } catch (erreur) {

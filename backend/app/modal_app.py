@@ -53,6 +53,14 @@ app = modal.App("aftech-ai-platform")
 # de conteneur, pour ne pas re-télécharger plusieurs Go à chaque cold start.
 hf_cache_volume = modal.Volume.from_name("aftech-hf-cache", create_if_missing=True)
 
+# Documents déposés depuis la Bibliothèque (PDF, registre, index reconstruit
+# dynamiquement) — SÉPARÉ de l'index embarqué dans `image` ci-dessous, qui
+# reste figé (les 4 PDF historiques). Volume créé une seule fois, hors code :
+#   modal volume create aftech-document-store
+DOCUMENT_STORE_VOLUME_NAME = "aftech-document-store"
+document_store_volume = modal.Volume.from_name(DOCUMENT_STORE_VOLUME_NAME, create_if_missing=True)
+DOCUMENT_STORE_MOUNT = "/data/document-store"
+
 # Secret Modal contenant BACKEND_API_KEY (et toute autre valeur sensible).
 # Créé une seule fois, en dehors du code, via :
 #   modal secret create aftech-backend-secrets BACKEND_API_KEY=<valeur>
@@ -78,7 +86,10 @@ image = (
 @app.function(
     image=image,
     gpu=GPU_TYPE,
-    volumes={"/root/.cache/huggingface": hf_cache_volume},
+    volumes={
+        "/root/.cache/huggingface": hf_cache_volume,
+        DOCUMENT_STORE_MOUNT: document_store_volume,
+    },
     secrets=[backend_secret],
     min_containers=MIN_CONTAINERS,
     max_containers=MAX_CONTAINERS,
@@ -86,10 +97,23 @@ image = (
 )
 @modal.asgi_app()
 def web():
-    # Métrique de démarrage (sans contenu sensible) : visible dans `modal app logs`.
-    print(f"[modal] démarrage d'un conteneur — GPU={GPU_TYPE}, index=/app/data/indexes/aftech_documents")
+    index_baked = "/app/data/indexes/aftech_documents"
+    index_sur_volume = os.path.join(DOCUMENT_STORE_MOUNT, "index", "current")
+    # Une fois qu'au moins un document a été ajouté/supprimé via la
+    # Bibliothèque, index/current existe sur le Volume et devient la version
+    # active (elle contient alors les 4 PDF historiques + les nouveaux) —
+    # sinon (tout premier démarrage, avant toute utilisation de cette
+    # fonctionnalité), on repart de l'index figé dans l'image, inchangé.
+    index_actif = (
+        index_sur_volume if os.path.isfile(os.path.join(index_sur_volume, "index.faiss")) else index_baked
+    )
 
-    os.environ.setdefault("INDEX_DIR", "/app/data/indexes/aftech_documents")
+    # Métrique de démarrage (sans contenu sensible) : visible dans `modal app logs`.
+    print(f"[modal] démarrage d'un conteneur — GPU={GPU_TYPE}, index={index_actif}")
+
+    os.environ.setdefault("INDEX_DIR", index_actif)
+    os.environ.setdefault("DOCUMENT_STORE_DIR", DOCUMENT_STORE_MOUNT)
+    os.environ.setdefault("DOCUMENT_STORE_VOLUME_NAME", DOCUMENT_STORE_VOLUME_NAME)
 
     from app.main import app as fastapi_app
 

@@ -58,6 +58,8 @@ export interface HealthResponse {
   chunks_count: number;
 }
 
+export type DocumentStatus = "UPLOADED" | "EXTRACTING" | "INDEXING" | "READY" | "FAILED" | "DELETING";
+
 export interface DocumentItem {
   nom_fichier: string;
   pages: number;
@@ -65,6 +67,29 @@ export interface DocumentItem {
   hash_sha256: string;
   modele_embeddings: string;
   date_index: string;
+  // Absents pour les documents "historiques" (déjà indexés avant l'upload
+  // dynamique, jamais supprimables — voir backend/app/document_manager.py).
+  id?: string;
+  statut?: DocumentStatus;
+  message_erreur?: string | null;
+  taille_octets?: number;
+  supprimable: boolean;
+}
+
+export interface DocumentUploadResponse {
+  id: string;
+  nom_original: string;
+  statut: DocumentStatus;
+}
+
+export interface DocumentStatusResponse {
+  id: string;
+  nom_original: string;
+  statut: DocumentStatus;
+  message_erreur: string | null;
+  nb_pages: number;
+  nb_passages: number;
+  date_ajout: string;
 }
 
 export interface MetricsResponse {
@@ -89,7 +114,8 @@ export type ApiErrorCode =
   | "api_key_missing"
   | "backend_error_status"
   | "timeout_no_response"
-  | "backend_unreachable";
+  | "backend_unreachable"
+  | "no_file";
 
 // Résultat d'un appel proxy côté serveur Next.js : soit les données, soit une
 // erreur typée (jamais de throw silencieux côté composants). "message" reste

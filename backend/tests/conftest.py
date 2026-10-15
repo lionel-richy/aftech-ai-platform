@@ -9,6 +9,7 @@ sans dépendre de Qwen/BGE-M3/FAISS.
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 os.environ.setdefault("BACKEND_API_KEY", "test-key")
 
-from app.main import app, get_engine  # noqa: E402
+from app.document_manager import DocumentManager  # noqa: E402
+from app.main import app, get_document_manager, get_engine  # noqa: E402
 from app.metrics import metrics_store  # noqa: E402
 
 API_KEY = os.environ["BACKEND_API_KEY"]
@@ -72,6 +74,16 @@ class FakeRagEngine:
             raise self._ask_exception
         return self._ask_result
 
+    # --- Utilisés par DocumentManager (voir document_manager.py) ---
+
+    embedder = None  # jamais utilisé dans les tests qui ne déclenchent pas d'indexation réelle
+
+    def chunks_historiques(self, noms_affiches_geres: set[str]) -> list[dict]:
+        return []
+
+    def recharger_index(self, dossier_index: str) -> None:
+        pass
+
 
 @pytest.fixture
 def auth_headers() -> dict:
@@ -85,6 +97,9 @@ def make_client():
 
     def _make(fake_engine: FakeRagEngine) -> TestClient:
         app.dependency_overrides[get_engine] = lambda: fake_engine
+        racine_store = tempfile.mkdtemp(prefix="aftech-test-documents-")
+        gestionnaire = DocumentManager(racine_store, fake_engine)
+        app.dependency_overrides[get_document_manager] = lambda: gestionnaire
         client = TestClient(app)
         clients.append(client)
         return client

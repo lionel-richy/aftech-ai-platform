@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { LayoutGrid, List, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -16,6 +17,7 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
   const [tri, setTri] = useState<Tri>("nom");
   const [vue, setVue] = useState<"grille" | "liste">("grille");
   const t = useTranslations("Bibliotheque");
+  const router = useRouter();
 
   const documentsFiltres = useMemo(() => {
     const filtre = documents.filter((d) => d.nom_fichier.toLowerCase().includes(recherche.toLowerCase()));
@@ -77,7 +79,7 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
           </button>
         </div>
 
-        <AjouterDocumentButton />
+        <AjouterDocumentButton onDocumentAjoute={() => router.refresh()} />
       </div>
 
       {documentsFiltres.length === 0 ? (
@@ -85,7 +87,11 @@ export function BibliothequeView({ documents }: { documents: DocumentItem[] }) {
       ) : (
         <div className={vue === "grille" ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3" : "flex flex-col gap-3"}>
           {documentsFiltres.map((document) => (
-            <DocumentCard key={document.nom_fichier} document={document} />
+            <DocumentCard
+              key={document.id ?? document.nom_fichier}
+              document={document}
+              onSupprime={() => router.refresh()}
+            />
           ))}
         </div>
       )}

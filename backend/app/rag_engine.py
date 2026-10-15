@@ -170,6 +170,7 @@ class RagEngine:
         # logique de chargement (donc : même code = même paramètres garantis
         # entre les GPU testés).
         self.timings_chargement: dict[str, float] = {}
+        self._verrou_rechargement = threading.Lock()
 
     # --- Chargement (une seule fois par conteneur, voir main.py:lifespan) ---
 
@@ -267,6 +268,33 @@ class RagEngine:
             "chunks_count": len(self.chunks),
         }
 
+    def recharger_index(self, dossier_index: str) -> None:
+        """Remplace l'index/chunks/manifest ACTIFS par une version reconstruite
+        avec succès (voir index_builder.reconstruire_index) — sans recharger
+        Qwen ni BGE-M3, et sans redémarrer le conteneur. Les recherches déjà
+        en cours au moment de l'appel continuent sur l'ancienne version (voir
+        _rechercher_passages, qui capture ses propres références locales)."""
+        import faiss
+
+        nouvel_index = faiss.read_index(os.path.join(dossier_index, "index.faiss"))
+        with open(os.path.join(dossier_index, "chunks.json"), encoding="utf-8") as f:
+            nouveaux_chunks = json.load(f)
+        with open(os.path.join(dossier_index, "manifest.json"), encoding="utf-8") as f:
+            nouveau_manifest = json.load(f)
+
+        with self._verrou_rechargement:
+            self.index = nouvel_index
+            self.chunks = nouveaux_chunks
+            self.manifest = nouveau_manifest
+
+    def chunks_historiques(self, noms_affiches_geres: set[str]) -> list[dict]:
+        """Chunks actuellement actifs dont la source N'EST PAS gérée par le
+        registre de documents (ex. les 4 PDF déjà indexés avant cette
+        fonctionnalité, dont on n'a jamais eu le fichier d'origine sur ce
+        volume) — à conserver tels quels lors d'une reconstruction, jamais
+        ré-extraits puisqu'on ne possède pas leur PDF source."""
+        return [c for c in self.chunks if c["source"] not in noms_affiches_geres]
+
     def documents(self) -> list[dict]:
         stats = self.manifest.get("stats_par_pdf", {})
         hashes = self.manifest.get("hashes_pdf", {})
@@ -288,18 +316,29 @@ class RagEngine:
     # --- Recherche + génération ---
 
     def _rechercher_passages(self, question: str, top_k: int) -> list[dict]:
+        # Références LOCALES capturées une seule fois : si recharger_index()
+        # remplace self.index/self.chunks pendant cette recherche (ajout de
+        # document depuis la Bibliothèque), cet appel continue d'utiliser la
+        # version qu'il a capturée au début, jamais un mélange des deux.
+        index, chunks = self.index, self.chunks
+
         embedding_question = self.embedder.encode(
             [question], convert_to_numpy=True, normalize_embeddings=True
         ).astype("float32")
 
-        nb = min(top_k, len(self.chunks))
-        scores, indices = self.index.search(embedding_question, nb)
+        nb = min(top_k, len(chunks))
+        if nb == 0:
+            # Bibliothèque vide (tous les documents supprimés) : FAISS refuse
+            # k=0 (AssertionError), donc on court-circuite plutôt que
+            # d'interroger un index sans aucun vecteur.
+            return []
+        scores, indices = index.search(embedding_question, nb)
 
         resultats = []
         for rang, (score, indice) in enumerate(zip(scores[0], indices[0])):
             if indice < 0:
                 continue
-            chunk = self.chunks[indice]
+            chunk = chunks[indice]
             resultats.append(
                 {
                     "id": f"P{rang + 1}",
