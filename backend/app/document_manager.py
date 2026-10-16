@@ -10,7 +10,11 @@ Aucune dépendance à FastAPI/Modal ici — testable avec un RagEngine réel
 
 import logging
 import os
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
+
+
+async def _ne_rien_faire() -> None:
+    pass
 
 from . import index_builder
 from .document_pipeline import (
@@ -45,25 +49,26 @@ class DocumentManager:
         racine_store: str,
         engine,
         taille_max_octets: int = TAILLE_MAX_OCTETS_DEFAUT,
-        on_mutation: Optional[Callable[[], None]] = None,
+        on_mutation: Optional[Callable[[], Awaitable[None]]] = None,
     ) -> None:
         self.racine_store = racine_store
         self.engine = engine
         self.taille_max_octets = taille_max_octets
         self.registry = DocumentRegistry(racine_store)
-        # Appelé après chaque écriture durable (ajout/suppression/index) —
-        # en production, committe le Modal Volume (voir modal_app.py) pour que
+        # Appelé (et TOUJOURS awaité) après chaque écriture durable — en
+        # production, committe le Modal Volume (voir modal_app.py) pour que
         # les écritures survivent à un redémarrage de conteneur. Aucune
-        # dépendance à `modal` ici : None en local/tests (voir main.py).
-        self._on_mutation = on_mutation or (lambda: None)
+        # dépendance à `modal` ici : no-op en local/tests (voir main.py).
+        self._on_mutation = on_mutation or _ne_rien_faire
         os.makedirs(os.path.join(racine_store, "documents"), exist_ok=True)
 
     # --- Dépôt ---
 
-    def deposer(self, contenu: bytes, nom_original: str) -> EnregistrementDocument:
+    async def deposer(self, contenu: bytes, nom_original: str) -> EnregistrementDocument:
         """Valide puis enregistre le fichier (statut UPLOADED) — ne lance PAS
         encore l'extraction/indexation (voir traiter(), appelé en tâche de
-        fond par main.py : la requête d'upload répond vite)."""
+        fond par main.py : la requête d'upload répond vite). async pour
+        pouvoir committer le Modal Volume sans bloquer (voir _on_mutation)."""
         valider_fichier_pdf(contenu, nom_original, self.taille_max_octets)  # lève FichierInvalide
 
         hash_sha256 = calculer_sha256(contenu)
@@ -88,13 +93,22 @@ class DocumentManager:
             f.write(contenu)
 
         self.registry.ajouter(enregistrement)
-        self._on_mutation()
+        await self._on_mutation()
         logger.info("document ajouté id=%s taille=%d statut=UPLOADED", id_document, len(contenu))
         return enregistrement
 
     # --- Traitement (extraction + indexation), pensé pour tourner en tâche de fond ---
+    #
+    # ASYNC (pas juste par convention) : bug réel rencontré en production
+    # (voir index_builder.py) — un traitement synchrone géant bloquait tout
+    # le conteneur pendant plusieurs minutes, au point que Modal l'a
+    # remplacé en pleine reconstruction, laissant un document bloqué pour
+    # toujours en INDEXING. Starlette détecte qu'une BackgroundTask est une
+    # coroutine et l'exécute nativement sur la boucle d'événements (voir
+    # main.py) — c'est CE qui permet aux points de cession internes
+    # (index_builder._encoder_par_lots) de garder le serveur réactif.
 
-    def traiter(self, id_document: str) -> None:
+    async def traiter(self, id_document: str) -> None:
         self.registry.mettre_a_jour(id_document, statut="EXTRACTING")
         try:
             doc = self.registry.obtenir(id_document)
@@ -107,55 +121,55 @@ class DocumentManager:
             nb_pages = len(PdfReader(chemin_pdf).pages)
             self.registry.mettre_a_jour(id_document, nb_pages=nb_pages, statut="INDEXING")
 
-            self._reconstruire_index_complet()
+            await self._reconstruire_index_complet()
 
             self.registry.mettre_a_jour(id_document, statut="READY")
-            self._on_mutation()
+            await self._on_mutation()
             logger.info("document indexé id=%s statut=READY", id_document)
         except Exception as exc:  # noqa: BLE001 — jamais de traceback dans message_erreur
             logger.warning("échec indexation id=%s", id_document)
             self.registry.mettre_a_jour(id_document, statut="FAILED", message_erreur=str(exc)[:300])
             raise
 
-    def _reconstruire_index_complet(self) -> None:
+    async def _reconstruire_index_complet(self) -> None:
         noms_geres = {d["nom_original"] for d in self.registry.lister()}
         chunks_historiques = self.engine.chunks_historiques(noms_geres)
         # INDEXING : le document qu'on vient de faire passer par cet état
         # (celui en cours de traitement) ; READY : les autres déjà indexés.
         documents_actifs = [d for d in self.registry.lister() if d["statut"] in ("INDEXING", "READY")]
 
-        index_builder.reconstruire_index(
+        await index_builder.reconstruire_index(
             chunks_historiques, documents_actifs, self.registry, self.engine.embedder, self.racine_store
         )
         self.engine.recharger_index(index_builder.chemin_index_courant(self.racine_store))
 
     # --- Suppression ---
 
-    def supprimer(self, id_document: str) -> None:
+    async def supprimer(self, id_document: str) -> None:
         doc = self.registry.obtenir(id_document)
         if doc is None:
             raise DocumentIntrouvable(id_document)
 
         self.registry.mettre_a_jour(id_document, statut="DELETING")
         try:
-            self._reconstruire_index_complet_sans(id_document)
+            await self._reconstruire_index_complet_sans(id_document)
             chemin_pdf = self.registry.chemin_pdf(doc)
             if os.path.isfile(chemin_pdf):
                 os.remove(chemin_pdf)
             self.registry.supprimer(id_document)
-            self._on_mutation()
+            await self._on_mutation()
             logger.info("document supprimé id=%s", id_document)
         except Exception:
             self.registry.mettre_a_jour(id_document, statut="FAILED", message_erreur="Échec de la suppression.")
             raise
 
-    def _reconstruire_index_complet_sans(self, id_exclu: str) -> None:
+    async def _reconstruire_index_complet_sans(self, id_exclu: str) -> None:
         noms_geres = {d["nom_original"] for d in self.registry.lister() if d["id"] != id_exclu}
         chunks_historiques = self.engine.chunks_historiques(noms_geres | {self.registry.obtenir(id_exclu)["nom_original"]})
         documents_actifs = [
             d for d in self.registry.lister() if d["id"] != id_exclu and d["statut"] in ("INDEXING", "READY")
         ]
-        index_builder.reconstruire_index(
+        await index_builder.reconstruire_index(
             chunks_historiques, documents_actifs, self.registry, self.engine.embedder, self.racine_store
         )
         self.engine.recharger_index(index_builder.chemin_index_courant(self.racine_store))

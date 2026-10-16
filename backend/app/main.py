@@ -44,10 +44,13 @@ def _callback_commit_volume_si_modal():
     if not nom_volume:
         return None
 
-    def _commit() -> None:
+    async def _commit() -> None:
         import modal
 
-        modal.Volume.from_name(nom_volume).commit()
+        # .commit.aio() (pas .commit()) : l'équivalent async natif de Modal,
+        # pour ne jamais bloquer la boucle d'événements sur cet appel réseau
+        # (voir AsyncUsageWarning observée en production avec .commit()).
+        await modal.Volume.from_name(nom_volume).commit.aio()
 
     return _commit
 
@@ -148,7 +151,7 @@ async def upload_document(
 ) -> schemas.DocumentUploadResponse:
     contenu = await fichier.read()
     try:
-        enregistrement = gestionnaire.deposer(contenu, fichier.filename or "document.pdf")
+        enregistrement = await gestionnaire.deposer(contenu, fichier.filename or "document.pdf")
     except FichierInvalide as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except DocumentDejaIndexe as exc:
@@ -187,7 +190,7 @@ async def delete_document(
     id_document: str, gestionnaire: DocumentManager = Depends(get_document_manager)
 ) -> None:
     try:
-        gestionnaire.supprimer(id_document)
+        await gestionnaire.supprimer(id_document)
     except DocumentIntrouvable as exc:
         raise HTTPException(status_code=404, detail="Document introuvable.") from exc
     except ReconstructionDejaEnCours as exc:

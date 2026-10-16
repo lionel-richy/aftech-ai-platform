@@ -6,6 +6,8 @@ from app import index_builder
 from app.document_manager import DocumentDejaIndexe, DocumentIntrouvable, DocumentManager
 from app.document_pipeline import FichierInvalide
 
+pytestmark = pytest.mark.asyncio
+
 
 class FakeEmbedder:
     def encode(self, textes, convert_to_numpy=True, normalize_embeddings=True):
@@ -48,64 +50,67 @@ def gestionnaire(tmp_path):
 
 
 class TestDepotEtTraitement:
-    def test_depot_puis_traitement_aboutit_a_ready(self, gestionnaire):
-        enregistrement = gestionnaire.deposer(pdf_valide(), "rapport.pdf")
+    async def test_depot_puis_traitement_aboutit_a_ready(self, gestionnaire):
+        enregistrement = await gestionnaire.deposer(pdf_valide(), "rapport.pdf")
         assert enregistrement.statut == "UPLOADED"
 
-        gestionnaire.traiter(enregistrement.id)
+        await gestionnaire.traiter(enregistrement.id)
 
         doc = gestionnaire.obtenir_statut(enregistrement.id)
         assert doc["statut"] == "READY"
         assert doc["nb_pages"] == 1
         assert doc["nb_passages"] >= 1
 
-    def test_deux_depots_differents_restent_independants(self, gestionnaire):
-        a = gestionnaire.deposer(pdf_valide(texte="Contenu A."), "a.pdf")
-        b = gestionnaire.deposer(pdf_valide(texte="Contenu B."), "b.pdf")
-        gestionnaire.traiter(a.id)
-        gestionnaire.traiter(b.id)
+    async def test_deux_depots_differents_restent_independants(self, gestionnaire):
+        a = await gestionnaire.deposer(pdf_valide(texte="Contenu A."), "a.pdf")
+        b = await gestionnaire.deposer(pdf_valide(texte="Contenu B."), "b.pdf")
+        await gestionnaire.traiter(a.id)
+        await gestionnaire.traiter(b.id)
 
         documents = gestionnaire.lister_tout()
         noms = {d["nom_fichier"] for d in documents}
         assert noms == {"a.pdf", "b.pdf"}
         assert all(d["statut"] == "READY" for d in documents)
 
-    def test_doublon_rejete_des_le_depot(self, gestionnaire):
+    async def test_doublon_rejete_des_le_depot(self, gestionnaire):
         contenu = pdf_valide()
-        gestionnaire.deposer(contenu, "premier.pdf")
+        await gestionnaire.deposer(contenu, "premier.pdf")
 
         with pytest.raises(DocumentDejaIndexe):
-            gestionnaire.deposer(contenu, "copie_renommee.pdf")
+            await gestionnaire.deposer(contenu, "copie_renommee.pdf")
 
-    def test_echec_extraction_marque_failed_avec_message_non_sensible(self, gestionnaire, monkeypatch):
-        enregistrement = gestionnaire.deposer(pdf_valide(), "rapport.pdf")
+    async def test_echec_extraction_marque_failed_avec_message_non_sensible(self, gestionnaire, monkeypatch):
+        enregistrement = await gestionnaire.deposer(pdf_valide(), "rapport.pdf")
 
         def extraction_cassee(*_args, **_kwargs):
+            # SYNC (pas async) : index_builder l'appelle via
+            # asyncio.to_thread(extraire_chunks_pdf, ...), qui exige un
+            # callable synchrone — une coroutine ne serait jamais exécutée.
             raise RuntimeError("/var/secret/path/interne explosé")
 
         monkeypatch.setattr(index_builder, "extraire_chunks_pdf", extraction_cassee)
 
         with pytest.raises(RuntimeError):
-            gestionnaire.traiter(enregistrement.id)
+            await gestionnaire.traiter(enregistrement.id)
 
         doc = gestionnaire.obtenir_statut(enregistrement.id)
         assert doc["statut"] == "FAILED"
         assert doc["message_erreur"] is not None
 
-    def test_fichier_invalide_rejete_avant_tout_enregistrement(self, gestionnaire):
+    async def test_fichier_invalide_rejete_avant_tout_enregistrement(self, gestionnaire):
         with pytest.raises(FichierInvalide):
-            gestionnaire.deposer(b"pas un pdf", "x.pdf")
+            await gestionnaire.deposer(b"pas un pdf", "x.pdf")
         assert gestionnaire.lister_tout() == []
 
 
 class TestSuppression:
-    def test_suppression_retire_le_document_et_reconstruit_lindex(self, gestionnaire):
-        a = gestionnaire.deposer(pdf_valide(texte="Contenu A."), "a.pdf")
-        b = gestionnaire.deposer(pdf_valide(texte="Contenu B."), "b.pdf")
-        gestionnaire.traiter(a.id)
-        gestionnaire.traiter(b.id)
+    async def test_suppression_retire_le_document_et_reconstruit_lindex(self, gestionnaire):
+        a = await gestionnaire.deposer(pdf_valide(texte="Contenu A."), "a.pdf")
+        b = await gestionnaire.deposer(pdf_valide(texte="Contenu B."), "b.pdf")
+        await gestionnaire.traiter(a.id)
+        await gestionnaire.traiter(b.id)
 
-        gestionnaire.supprimer(a.id)
+        await gestionnaire.supprimer(a.id)
 
         assert gestionnaire.obtenir_statut(a.id) is None
         restants = {d["nom_fichier"] for d in gestionnaire.lister_tout()}
@@ -115,25 +120,25 @@ class TestSuppression:
         assert "a.pdf" not in sources_actives
         assert "b.pdf" in sources_actives
 
-    def test_suppression_document_inconnu_leve_document_introuvable(self, gestionnaire):
+    async def test_suppression_document_inconnu_leve_document_introuvable(self, gestionnaire):
         with pytest.raises(DocumentIntrouvable):
-            gestionnaire.supprimer("id-qui-nexiste-pas")
+            await gestionnaire.supprimer("id-qui-nexiste-pas")
 
-    def test_apres_suppression_le_fichier_pdf_est_bien_retire_du_disque(self, gestionnaire):
+    async def test_apres_suppression_le_fichier_pdf_est_bien_retire_du_disque(self, gestionnaire):
         import os
 
-        a = gestionnaire.deposer(pdf_valide(), "a.pdf")
-        gestionnaire.traiter(a.id)
+        a = await gestionnaire.deposer(pdf_valide(), "a.pdf")
+        await gestionnaire.traiter(a.id)
         chemin = gestionnaire.registry.chemin_pdf(a.id)
         assert os.path.isfile(chemin)
 
-        gestionnaire.supprimer(a.id)
+        await gestionnaire.supprimer(a.id)
 
         assert not os.path.isfile(chemin)
 
 
 class TestFusionHistoriqueEtGere:
-    def test_documents_historiques_non_supprimables_restent_listes(self, tmp_path):
+    async def test_documents_historiques_non_supprimables_restent_listes(self, tmp_path):
         engine = FakeEngine()
         engine.documents = lambda: [
             {

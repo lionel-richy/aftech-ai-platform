@@ -15,6 +15,7 @@ N'importe JAMAIS torch/transformers/Qwen : utilise seulement un embedder déjà
 chargé (BGE-M3 sur CPU), passé en paramètre — voir app/rag_engine.py.
 """
 
+import asyncio
 import errno
 import json
 import os
@@ -23,6 +24,14 @@ from datetime import datetime, timezone
 
 TAILLE_PASSAGE = 800
 CHEVAUCHEMENT = 150
+# Bug réel rencontré en production : embedder.encode() sur TOUS les passages
+# d'un coup (ex. 1489) bloque le GIL assez longtemps pour geler tout le
+# conteneur (plus aucune requête servie) — Modal a fini par le remplacer,
+# tuant la tâche en plein milieu (document resté bloqué en INDEXING,
+# verrou de reconstruction jamais libéré). Encoder par petits lots, avec un
+# point de cession explicite à la boucle d'événements entre chaque lot,
+# laisse le serveur répondre aux autres requêtes pendant ce temps.
+TAILLE_LOT_EMBEDDING = 64
 
 NOM_LOCK = ".reindex.lock"
 DOSSIER_COURANT = "current"
@@ -71,6 +80,25 @@ def extraire_chunks_pdf(chemin_pdf: str, nom_source_affiche: str) -> list[dict]:
     return chunks
 
 
+AGE_MAX_VERROU_SECONDES = 15 * 60  # voir _verrou_est_perime ci-dessous
+
+
+def _verrou_est_perime(chemin: str) -> bool:
+    """Un conteneur tué/recyclé en plein traitement (ex. incident réel
+    rencontré en production avant le passage à l'encodage par lots) laisse
+    le verrou orphelin pour toujours, bloquant TOUTE future reconstruction.
+    Un verrou plus vieux que AGE_MAX_VERROU_SECONDES est considéré abandonné
+    et peut être repris — largement au-dessus du temps désormais nécessaire
+    pour une reconstruction normale."""
+    try:
+        with open(chemin, encoding="utf-8") as f:
+            horodatage = datetime.fromisoformat(f.read().strip())
+    except (OSError, ValueError):
+        return True  # illisible/corrompu : on ne le laisse pas bloquer indéfiniment
+    age = datetime.now(timezone.utc) - horodatage
+    return age.total_seconds() > AGE_MAX_VERROU_SECONDES
+
+
 class VerrouReconstruction:
     """Verrou par fichier (O_CREAT|O_EXCL, atomique au niveau du système de
     fichiers) : empêche deux reconstructions simultanées, y compris entre
@@ -86,6 +114,9 @@ class VerrouReconstruction:
             os.close(fd)
         except OSError as exc:
             if exc.errno == errno.EEXIST:
+                if _verrou_est_perime(self.chemin):
+                    os.remove(self.chemin)
+                    return self.__enter__()  # une seule reprise : repart avec un verrou frais
                 raise ReconstructionDejaEnCours(
                     "Une reconstruction d'index est déjà en cours — réessayez dans un instant."
                 ) from exc
@@ -125,7 +156,26 @@ def _valider_dossier_index(dossier: str) -> None:
         )
 
 
-def reconstruire_index(
+async def _encoder_par_lots(embedder, textes: list[str]):
+    """Encode en plusieurs appels COURTS (TAILLE_LOT_EMBEDDING passages à la
+    fois), chacun délégué à un thread (asyncio.to_thread) avec un point de
+    cession explicite entre deux lots — jamais un seul encode() géant qui
+    accapare le GIL pendant plusieurs minutes d'affilée (voir le
+    commentaire sur TAILLE_LOT_EMBEDDING)."""
+    import numpy as np
+
+    morceaux = []
+    for debut in range(0, len(textes), TAILLE_LOT_EMBEDDING):
+        lot = textes[debut : debut + TAILLE_LOT_EMBEDDING]
+        embeddings_lot = await asyncio.to_thread(
+            embedder.encode, lot, convert_to_numpy=True, normalize_embeddings=True
+        )
+        morceaux.append(embeddings_lot)
+        await asyncio.sleep(0)  # cède explicitement la main à la boucle d'événements
+    return np.concatenate(morceaux, axis=0)
+
+
+async def reconstruire_index(
     chunks_historiques: list[dict],
     documents_actifs: list[dict],
     registry,
@@ -136,7 +186,11 @@ def reconstruire_index(
     à ré-extraire depuis leur PDF stocké. Renvoie le nouveau manifest.
 
     Protégée par VerrouReconstruction : lève ReconstructionDejaEnCours si un
-    autre appel est déjà en cours (voir main.py, qui traduit ça en 409)."""
+    autre appel est déjà en cours (voir main.py, qui traduit ça en 409).
+
+    ASYNC (pas juste par convention) : voir _encoder_par_lots — c'est ce qui
+    permet au serveur de continuer à répondre à d'autres requêtes PENDANT
+    une reconstruction, au lieu de geler tout le conteneur."""
     dossier_index = os.path.join(racine_store, "index")
     os.makedirs(dossier_index, exist_ok=True)
 
@@ -152,7 +206,10 @@ def reconstruire_index(
 
             for doc in documents_actifs:
                 chemin_pdf = registry.chemin_pdf(doc)
-                nouveaux = extraire_chunks_pdf(chemin_pdf, doc["nom_original"])
+                # À son tour délégué à un thread : plusieurs gros PDF
+                # pourraient sinon retarder la cession à la boucle
+                # d'événements, même si c'est rarement le facteur dominant.
+                nouveaux = await asyncio.to_thread(extraire_chunks_pdf, chemin_pdf, doc["nom_original"])
                 chunks.extend(nouveaux)
                 hashes_pdf[doc["nom_original"]] = doc["hash_sha256"]
                 stats_par_pdf[doc["nom_original"]] = {
@@ -169,9 +226,7 @@ def reconstruire_index(
 
             if chunks:
                 textes = [c["texte"] for c in chunks]
-                embeddings = embedder.encode(
-                    textes, convert_to_numpy=True, normalize_embeddings=True
-                ).astype("float32")
+                embeddings = (await _encoder_par_lots(embedder, textes)).astype("float32")
                 index = faiss.IndexFlatIP(embeddings.shape[1])
                 index.add(embeddings)
             else:
